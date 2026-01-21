@@ -1,0 +1,432 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codenow-com.github.io/codenow-cli/schemas/cn-data-plane-operator-config.v1.schema.json",
+  "$comment": "Schema version v1",
+  "title": "CodeNOW Data Plane Operator Config v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "ContainerRegistry",
+    "NpmRegistry",
+    "Kubernetes",
+    "HttpProxy",
+    "S3",
+    "Scm",
+    "Environment",
+    "Pulumi",
+    "Security"
+  ],
+  "properties": {
+    "ContainerRegistry": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Hostname",
+        "Username",
+        "Password"
+      ],
+      "properties": {
+        "Hostname": {
+          "type": "string"
+        },
+        "Username": {
+          "type": "string"
+        },
+        "Password": {
+          "type": "string"
+        }
+      }
+    },
+    "NpmRegistry": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Url",
+        "AccessToken"
+      ],
+      "properties": {
+        "Url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "AccessToken": {
+          "type": "string"
+        }
+      }
+    },
+    "Kubernetes": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Namespaces",
+        "NodeLabels",
+        "PodPlacementMode",
+        "SecurityContextRunAsId"
+      ],
+      "properties": {
+        "Namespaces": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "System",
+            "Cni",
+            "CiPipelines"
+          ],
+          "properties": {
+            "System": {
+              "$ref": "#/$defs/namespace"
+            },
+            "Cni": {
+              "$ref": "#/$defs/namespace"
+            },
+            "CiPipelines": {
+              "$ref": "#/$defs/namespace"
+            }
+          }
+        },
+        "NodeLabels": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "System",
+            "Application"
+          ],
+          "properties": {
+            "System": {
+              "$ref": "#/$defs/nodeLabel"
+            },
+            "Application": {
+              "$ref": "#/$defs/nodeLabel"
+            }
+          }
+        },
+        "StorageClass": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "PodPlacementMode": {
+          "type": "string",
+          "enum": [
+            "PodNodeSelector",
+            "NodeSelectorAndTaints"
+          ]
+        },
+        "SecurityContextRunAsId": {
+          "type": "integer"
+        }
+      }
+    },
+    "HttpProxy": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Enabled"
+      ],
+      "properties": {
+        "Enabled": {
+          "type": "boolean"
+        },
+        "Hostname": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "Port": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "NoProxy": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "Enabled": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "Hostname",
+              "Port"
+            ]
+          }
+        }
+      ]
+    },
+    "S3": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Enabled"
+      ],
+      "properties": {
+        "Enabled": {
+          "type": "boolean"
+        },
+        "Url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "Bucket": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "Region": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "AuthenticationMethod": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "AccessKeySecretKey",
+            "IAMRole",
+            null
+          ]
+        },
+        "AccessKey": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "SecretKey": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "IAMRole": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "Enabled": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "Url",
+              "Bucket",
+              "Region",
+              "AuthenticationMethod"
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "AuthenticationMethod": {
+                      "const": "AccessKeySecretKey"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "AccessKey",
+                    "SecretKey"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "AuthenticationMethod": {
+                      "const": "IAMRole"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "IAMRole"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "Scm": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Url",
+        "AuthenticationMethod"
+      ],
+      "properties": {
+        "Url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "AuthenticationMethod": {
+          "type": "string",
+          "enum": [
+            "UsernamePassword",
+            "AccessToken"
+          ]
+        },
+        "Username": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "Password": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "AccessToken": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "AuthenticationMethod": {
+                "const": "UsernamePassword"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "Username",
+              "Password"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "AuthenticationMethod": {
+                "const": "AccessToken"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "AccessToken"
+            ]
+          }
+        }
+      ]
+    },
+    "Environment": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Name"
+      ],
+      "properties": {
+        "Name": {
+          "type": "string"
+        }
+      }
+    },
+    "Pulumi": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Images",
+        "Passphrase"
+      ],
+      "properties": {
+        "Images": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "RuntimeVersion",
+            "PluginsVersion"
+          ],
+          "properties": {
+            "RuntimeVersion": {
+              "type": "string"
+            },
+            "PluginsVersion": {
+              "type": "string"
+            }
+          }
+        },
+        "Passphrase": {
+          "type": "string"
+        }
+      }
+    },
+    "Security": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "CustomCaBase64": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "namespace": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Name"
+      ],
+      "properties": {
+        "Name": {
+          "type": "string"
+        }
+      }
+    },
+    "nodeLabel": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Key",
+        "Value"
+      ],
+      "properties": {
+        "Key": {
+          "type": "string"
+        },
+        "Value": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

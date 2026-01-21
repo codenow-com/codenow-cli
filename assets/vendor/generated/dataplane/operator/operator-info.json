@@ -1,0 +1,1 @@
+{ "operator": { "image": "pulumi/pulumi-kubernetes-operator", "version": "v2.3.0" }, "runtime": { "image": "pulumi/pulumi", "version": "3.216.0-nonroot" }, "plugins": { "image": "codenow/pulumi-operator-plugins", "version": "1.0.2" } }

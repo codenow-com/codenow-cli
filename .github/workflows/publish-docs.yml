@@ -1,0 +1,107 @@
+name: Publish Docs
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install MkDocs
+        run: |
+          pip install mkdocs mkdocs-material
+
+      # ------------------------------------------------------------
+      # Redirect /  ->  /docs/latest/
+      # ------------------------------------------------------------
+      - name: Create root redirect
+        run: |
+          mkdir -p site
+          cat <<'EOF' > site/index.html
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta http-equiv="refresh" content="0; url=docs/latest/">
+              <title>Redirecting…</title>
+            </head>
+            <body>
+              <p>Redirecting to <a href="docs/latest/">docs/latest</a>…</p>
+            </body>
+          </html>
+          EOF
+
+      # ------------------------------------------------------------
+      # Build latest docs
+      # ------------------------------------------------------------
+      - name: Build latest docs
+        run: |
+          {
+            cat mkdocs.yml
+            echo ""
+            echo "docs_dir: docs/latest"
+            echo "site_dir: site/docs/latest"
+          } > mkdocs.latest.yml
+
+          mkdocs build -f mkdocs.latest.yml --strict
+
+      # ------------------------------------------------------------
+      # Build versioned docs (docs/vX.Y) – SAFE
+      # ------------------------------------------------------------
+      - name: Build versioned docs
+        run: |
+          if compgen -G "docs/v*" > /dev/null; then
+            for dir in docs/v*; do
+              VERSION=$(basename "$dir")
+              echo "Building docs for $VERSION"
+
+              {
+                cat mkdocs.yml
+                echo ""
+                echo "docs_dir: docs/$VERSION"
+                echo "site_dir: site/docs/$VERSION"
+              } > mkdocs.$VERSION.yml
+
+              mkdocs build -f mkdocs.$VERSION.yml --strict
+            done
+          else
+            echo "No versioned docs found (docs/v*), skipping."
+          fi
+
+      # ------------------------------------------------------------
+      # Copy schemas
+      # ------------------------------------------------------------
+      - name: Copy schemas
+        run: |
+          mkdir -p site/schemas
+          cp -R schemas/* site/schemas/
+
+      # ------------------------------------------------------------
+      # Publish to GitHub Pages
+      # ------------------------------------------------------------
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,98 @@
+########## .NET BUILD ARTIFACTS ##########
+
+# Build output
+bin/
+obj/
+out/
+
+# Publish output
+publish/
+artifacts/
+
+# NativeAOT outputs
+*.a
+*.dll
+*.dylib
+*.so
+*.exe
+*.pdb
+*.obj
+*.o
+*.tmp
+*.map
+*.rsp
+
+# NuGet packages
+*.nupkg
+*.snupkg
+*.nuspec
+packages/
+
+# Generated project files
+project.lock.json
+project.fragment.lock.json
+
+########## RIDER / VS CODE / EDITOR ##########
+
+# Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+.vscode-test/
+
+# OmniSharp
+*.cmd
+*.cache
+*.config
+
+# Temporary files
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.pidb
+*.svclog
+*.DS_Store
+Thumbs.db
+
+########## DOTNET TOOLS ##########
+
+# Roslyn analyzers
+*.generated.cs
+
+# ConsoleAppFramework generated bindings
+*/obj/*/ConsoleAppFramework/ConsoleAppFramework.*.g.cs
+
+# Source generators
+*.g.cs
+
+########## TEST ARTIFACTS ##########
+
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+########## LOG FILES ##########
+
+*.log
+
+########## MISC ##########
+
+*.tmp
+*.bak
+*.swp
+*.orig
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+

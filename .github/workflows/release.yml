@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (semver, without 'v')"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  release:
+    environment: release
+
+    defaults:
+      run:
+        shell: bash
+
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            bin: cn
+          - os: macos-latest
+            rid: osx-arm64
+            bin: cn
+          - os: windows-latest
+            rid: win-x64
+            bin: cn.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      # ----------------------------
+      # Checkout
+      # ----------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ----------------------------
+      # Validate version
+      # ----------------------------
+      - name: Validate version
+        run: |
+          if [[ ! "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format. Use MAJOR.MINOR.PATCH"
+            exit 1
+          fi
+
+      # ----------------------------
+      # Snapshot documentation (only once)
+      # ----------------------------
+      - name: Create documentation snapshot
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          DOC_VERSION="$(echo "${{ inputs.version }}" | cut -d. -f1,2)"
+
+          echo "Creating docs snapshot v${DOC_VERSION}"
+
+          mkdir -p docs/v${DOC_VERSION}
+          cp -R docs/latest/* docs/v${DOC_VERSION}/
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add docs/v${DOC_VERSION}
+          git commit -m "docs: snapshot v${DOC_VERSION}" || echo "No docs changes to commit"
+
+          git push origin HEAD
+
+      # ----------------------------
+      # Setup .NET
+      # ----------------------------
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      # ----------------------------
+      # Create git tag (only once)
+      # ----------------------------
+      - name: Create git tag
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          git tag -a v${{ inputs.version }} -m "Release v${{ inputs.version }}"
+          git push origin v${{ inputs.version }}
+
+      # ----------------------------
+      # Publish binary
+      # ----------------------------
+      - name: Publish
+        run: |
+          dotnet publish src/CodeNOW.Cli/CodeNOW.Cli.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            -p:Version=${{ inputs.version }} \
+            -p:PublishAot=true \
+            -o publish
+
+      # ----------------------------
+      # Install zip
+      # ----------------------------
+      - name: Install zip
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y zip
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install zip
+          else
+            choco install zip -y
+          fi
+
+      # ----------------------------
+      # Prepare artifact (ZIP per platform)
+      # ----------------------------
+      - name: Prepare artifact
+        run: |
+          mkdir -p dist package
+
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cp publish/cn.exe package/cn.exe
+            cd package
+            zip ../dist/cn_windows_x64.zip cn.exe
+          elif [[ "${{ runner.os }}" == "Linux" ]]; then
+            cp publish/cn package/cn
+            chmod +x package/cn
+            cd package
+            zip ../dist/cn_linux_x64.zip cn
+          else
+            cp publish/cn package/cn
+            chmod +x package/cn
+            cd package
+            zip ../dist/cn_darwin_arm64.zip cn
+          fi
+
+      # ----------------------------
+      # Upload release asset
+      # ----------------------------
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: v${{ inputs.version }}
+          files: |
+            dist/*.zip
+
+      # ------------------------------------------------------------
+      # Trigger Publish Docs workflow
+      # ------------------------------------------------------------
+      - name: Trigger docs publish
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Triggering Publish Docs workflow…"
+          gh workflow run "Publish Docs" --ref main
