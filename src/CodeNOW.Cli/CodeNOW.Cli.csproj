@@ -20,9 +20,10 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <IlcDisableReflection>true</IlcDisableReflection>
 
-     <!-- Single binary -->
+    <!-- Single binary -->
     <PublishSingleFile>true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
 
     <RuntimeIdentifiers>linux-x64;osx-arm64;win-x64</RuntimeIdentifiers>
 
