@@ -202,7 +202,7 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
         {
             filePath = AnsiConsole.Prompt(
                 new TextPrompt<string>(
-                    $"Configuration file path [green]({DataPlaneConstants.OperatorConfigFileName})[/]      :")
+                    $"File path [green]({DataPlaneConstants.OperatorConfigFileName})[/]     :")
                     .DefaultValue(DataPlaneConstants.OperatorConfigFileName)
                     .ShowDefaultValue(false)
                     .Validate(path =>
@@ -250,12 +250,12 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
             try
             {
                 string encryptionKey = AnsiConsole.Prompt(
-                    new TextPrompt<string>("Encryption key for this configuration                      :").Secret());
+                    new TextPrompt<string>("Encryption key for this configuration       :").Secret());
                 var opConfig = configStore.LoadConfig(filePath, encryptionKey);
                 operatorInfoProvider.EnsurePulumiPluginsVersion(opConfig);
                 logger.LogInformation("Loaded configuration from {FilePath}.", filePath);
                 var editExisting = AnsiConsole.Prompt(
-                    new TextPrompt<bool>("Edit existing configuration? [blue][[y/n]][/] [green](n)[/]                     :")
+                    new TextPrompt<bool>("Edit existing configuration? [blue][[y/n]][/] [green](n)[/]      :")
                         .AddChoice(true)
                         .AddChoice(false)
                         .DefaultValue(false)
