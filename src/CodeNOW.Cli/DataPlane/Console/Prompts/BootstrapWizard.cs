@@ -99,7 +99,7 @@ internal sealed class BootstrapWizard
         WriteSection("Environment");
         opConfig.Environment.Name = PromptText(
             promptFactory,
-            "Environment name                                           :",
+            "Environment name                            :",
             initialValue: usePrefill ? opConfig.Environment.Name : null);
         AnsiConsole.WriteLine();
     }
@@ -109,12 +109,12 @@ internal sealed class BootstrapWizard
         WriteSection("NPM Registry");
         opConfig.NpmRegistry.Url = PromptText(
             promptFactory,
-            "URL                                                        :",
+            "URL                                         :",
             initialValue: usePrefill ? opConfig.NpmRegistry.Url : null,
             validator: PromptValidators.ValidateUrl);
         opConfig.NpmRegistry.AccessToken = PromptSecret(
             promptFactory,
-            "Access token                                               :",
+            "Access token                                :",
             initialValue: usePrefill ? opConfig.NpmRegistry.AccessToken : null);
         AnsiConsole.WriteLine();
     }
@@ -124,15 +124,15 @@ internal sealed class BootstrapWizard
         WriteSection("Container Registry");
         opConfig.ContainerRegistry.Hostname = PromptText(
             promptFactory,
-            "Hostname                                                   :",
+            "Hostname                                    :",
             initialValue: usePrefill ? opConfig.ContainerRegistry.Hostname : null);
         opConfig.ContainerRegistry.Username = PromptText(
             promptFactory,
-            "Username                                                   :",
+            "Username                                    :",
             initialValue: usePrefill ? opConfig.ContainerRegistry.Username : null);
         opConfig.ContainerRegistry.Password = PromptSecret(
             promptFactory,
-            "Password                                                   :",
+            "Password                                    :",
             initialValue: usePrefill ? opConfig.ContainerRegistry.Password : null);
         AnsiConsole.WriteLine();
     }
@@ -145,7 +145,7 @@ internal sealed class BootstrapWizard
         WriteSection("SCM (Git)");
         opConfig.Scm.Url = PromptText(
             promptFactory,
-            "Configuration repository URL                               :",
+            "Configuration repository URL                :",
             initialValue: existingConfig is not null ? opConfig.Scm.Url : null,
             validator: PromptValidators.ValidateUrl);
         var scmAuthChoices = PromptFactory.BuildSelectionChoices(
@@ -169,18 +169,18 @@ internal sealed class BootstrapWizard
             case ScmAuthenticationMethod.UsernamePassword:
                 opConfig.Scm.Username = PromptText(
                     promptFactory,
-                    "Username                                                   :",
+                    "Username                                    :",
                     initialValue: existingConfig is not null ? opConfig.Scm.Username : null);
                 opConfig.Scm.Password = PromptSecret(
                     promptFactory,
-                    "Password                                                   :",
+                    "Password                                    :",
                     initialValue: existingConfig is not null ? opConfig.Scm.Password : null);
                 break;
 
             case ScmAuthenticationMethod.AccessToken:
                 opConfig.Scm.AccessToken = PromptSecret(
                     promptFactory,
-                    "Access token                                               :",
+                    "Access token                                :",
                     initialValue: existingConfig is not null ? opConfig.Scm.AccessToken : null);
                 break;
         }
@@ -197,44 +197,44 @@ internal sealed class BootstrapWizard
         AnsiConsole.MarkupLine("[grey]Namespaces[/]");
         opConfig.Kubernetes.Namespaces.System.Name = PromptText(
             promptFactory,
-            "• System [green](cn-data-plane-system)[/]                            :",
+            "• System [green](cn-data-plane-system)[/]             :",
             initialValue: usePrefill ? opConfig.Kubernetes.Namespaces.System.Name : null,
             defaultValue: "cn-data-plane-system",
             showDefaultValue: false);
         opConfig.Kubernetes.Namespaces.Cni.Name = PromptText(
             promptFactory,
-            "• CNI [green](cn-data-plane-cni)[/]                                  :",
+            "• CNI [green](cn-data-plane-cni)[/]                   :",
             initialValue: usePrefill ? opConfig.Kubernetes.Namespaces.Cni.Name : null,
             defaultValue: "cn-data-plane-cni",
             showDefaultValue: false);
         opConfig.Kubernetes.Namespaces.CiPipelines.Name = PromptText(
             promptFactory,
-            "• CI Pipelines [green](cn-data-plane-ci-pipelines)[/]                :",
+            "• CI Pipelines [green](cn-data-plane-ci-pipelines)[/] :",
             initialValue: usePrefill ? opConfig.Kubernetes.Namespaces.CiPipelines.Name : null,
             defaultValue: "cn-data-plane-ci-pipelines",
             showDefaultValue: false);
         AnsiConsole.MarkupLine("[grey]Node labels[/]");
         opConfig.Kubernetes.NodeLabels.System.Key = PromptText(
             promptFactory,
-            "• System key [green](node-restriction.kubernetes.io/reserved-for)[/] :",
+            "• System key [green](codenow.com/node-type)[/]        :",
             initialValue: usePrefill ? opConfig.Kubernetes.NodeLabels.System.Key : null,
-            defaultValue: "node-restriction.kubernetes.io/reserved-for",
+            defaultValue: "codenow.com/node-type",
             showDefaultValue: false);
         opConfig.Kubernetes.NodeLabels.System.Value = PromptText(
             promptFactory,
-            "• System value [green](cn-data-plane-system)[/]                      :",
+            "• System value [green](cn-data-plane-system)[/]       :",
             initialValue: usePrefill ? opConfig.Kubernetes.NodeLabels.System.Value : null,
             defaultValue: "cn-data-plane-system",
             showDefaultValue: false);
         opConfig.Kubernetes.NodeLabels.Application.Key = PromptText(
             promptFactory,
-            "• App key [green](node-restriction.kubernetes.io/reserved-for)[/]    :",
+            "• App key [green](codenow.com/node-type)[/]           :",
             initialValue: usePrefill ? opConfig.Kubernetes.NodeLabels.Application.Key : null,
-            defaultValue: "node-restriction.kubernetes.io/reserved-for",
+            defaultValue: "codenow.com/node-type",
             showDefaultValue: false);
         opConfig.Kubernetes.NodeLabels.Application.Value = PromptText(
             promptFactory,
-            "• App value [green](cn-application)[/]                               :",
+            "• App value [green](cn-application)[/]                :",
             initialValue: usePrefill ? opConfig.Kubernetes.NodeLabels.Application.Value : null,
             defaultValue: "cn-application",
             showDefaultValue: false);
@@ -262,12 +262,12 @@ internal sealed class BootstrapWizard
             PodPlacementMode.NodeSelectorAndTaints => "Node selector + taints",
             _ => opConfig.Kubernetes.PodPlacementMode.ToString()
         };
-        AnsiConsole.Write("• Mode                                                     : " + display);
+        AnsiConsole.Write("• Mode                                      : " + display);
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[grey]Storage[/]");
         var storageClass = PromptText(
             promptFactory,
-            "• Storage class [green](default)[/]                                  :",
+            "• Storage class [green](default)[/]                   :",
             initialValue: usePrefill ? opConfig.Kubernetes.StorageClass : null,
             showDefaultValue: false,
             allowEmpty: true);
@@ -275,7 +275,7 @@ internal sealed class BootstrapWizard
         AnsiConsole.MarkupLine("[grey]Security context[/]");
         opConfig.Kubernetes.SecurityContextRunAsId = PromptInt(
             promptFactory,
-            "• RunAs UID/GID [green](1000)[/]                                    :",
+            "• RunAs UID/GID [green](1000)[/]                      :",
             initialValue: usePrefill ? opConfig.Kubernetes.SecurityContextRunAsId : null,
             defaultValue: 1000,
             showDefaultValue: false);
@@ -291,7 +291,7 @@ internal sealed class BootstrapWizard
         WriteSection("S3 Storage");
         opConfig.S3.Enabled = PromptBool(
             promptFactory,
-            "Enable? [blue][[y/n]][/] [green](y)[/]                                          :",
+            "Enable? [blue][[y/n]][/] [green](y)[/]                           :",
             initialValue: usePrefill ? opConfig.S3.Enabled : null,
             defaultValue: true,
             showDefaultValue: false,
@@ -300,16 +300,16 @@ internal sealed class BootstrapWizard
         {
             opConfig.S3.Url = PromptText(
                 promptFactory,
-                "URL                                                        :",
+                "URL                                         :",
                 initialValue: usePrefill ? opConfig.S3.Url : null,
                 validator: PromptValidators.ValidateUrl);
             opConfig.S3.Bucket = PromptText(
                 promptFactory,
-                "Bucket name                                                : ",
+                "Bucket name                                 : ",
                 initialValue: usePrefill ? opConfig.S3.Bucket : null);
             opConfig.S3.Region = PromptText(
                 promptFactory,
-                "Region [green](eu-central-1)[/]                                      :",
+                "Region [green](eu-central-1)[/]                       :",
                 initialValue: usePrefill ? opConfig.S3.Region : null,
                 defaultValue: "eu-central-1",
                 showDefaultValue: false);
@@ -335,18 +335,18 @@ internal sealed class BootstrapWizard
                 case S3AuthenticationMethod.AccessKeySecretKey:
                     opConfig.S3.AccessKey = PromptText(
                         promptFactory,
-                        "Access key                                                 :",
+                        "Access key                                  :",
                         initialValue: usePrefill ? opConfig.S3.AccessKey : null);
                     opConfig.S3.SecretKey = PromptSecret(
                         promptFactory,
-                        "Secret key                                                 :",
+                        "Secret key                                  :",
                         initialValue: usePrefill ? opConfig.S3.SecretKey : null);
                     break;
 
                 case S3AuthenticationMethod.IAMRole:
                     opConfig.S3.IAMRole = PromptText(
                         promptFactory,
-                        "IAM role                                                   :",
+                        "IAM role                                    :",
                         initialValue: usePrefill ? opConfig.S3.IAMRole : null,
                         validator: PromptValidators.ValidateIamRoleArnPrefix);
                     break;
@@ -360,7 +360,7 @@ internal sealed class BootstrapWizard
         WriteSection("HTTP Proxy");
         opConfig.HttpProxy.Enabled = PromptBool(
             promptFactory,
-            "Enable? [blue][[y/n]][/] [green](n)[/]                                          :",
+            "Enable? [blue][[y/n]][/] [green](n)[/]                           :",
             initialValue: usePrefill ? opConfig.HttpProxy.Enabled : null,
             defaultValue: false,
             showDefaultValue: false,
@@ -369,17 +369,17 @@ internal sealed class BootstrapWizard
         {
             opConfig.HttpProxy.Hostname = PromptText(
                 promptFactory,
-                "Hostname                                                   :",
+                "Hostname                                    :",
                 initialValue: usePrefill ? opConfig.HttpProxy.Hostname : null);
             opConfig.HttpProxy.Port = PromptInt(
                 promptFactory,
-                "Port [green](8080)[/]                                                :",
+                "Port [green](8080)[/]                                 :",
                 initialValue: usePrefill ? opConfig.HttpProxy.Port : null,
                 defaultValue: 8080,
                 showDefaultValue: false);
             opConfig.HttpProxy.NoProxy = PromptText(
                 promptFactory,
-                "No proxy hostnames                                         :",
+                "No proxy hostnames                          :",
                 initialValue: usePrefill ? opConfig.HttpProxy.NoProxy : null,
                 allowEmpty: true);
         }
@@ -391,7 +391,7 @@ internal sealed class BootstrapWizard
         WriteSection("Security");
         var customCaEnabled = PromptBool(
             promptFactory,
-            "Use custom CA? [blue][[y/n]][/] [green](n)[/]                                   :",
+            "Use custom CA? [blue][[y/n]][/] [green](n)[/]                    :",
             initialValue: usePrefill && !string.IsNullOrWhiteSpace(opConfig.Security.CustomCaBase64),
             defaultValue: false,
             showDefaultValue: false,
@@ -400,7 +400,7 @@ internal sealed class BootstrapWizard
         {
             var caPath = PromptText(
                 promptFactory,
-                "Custom CA certificate path (.crt/.pem):                    :",
+                "Custom CA certificate path (.crt/.pem):     :",
                 allowEmpty: usePrefill && !string.IsNullOrWhiteSpace(opConfig.Security.CustomCaBase64),
                 validator: path =>
                 {
@@ -442,7 +442,7 @@ internal sealed class BootstrapWizard
         AnsiConsole.MarkupLine("[grey]Choose where to save the configuration file.[/]\n");
         var outputPath = PromptText(
             promptFactory,
-            $"Configuration file path [green]({defaultConfigFile})[/]      :",
+            $"File path [green]({defaultConfigFile})[/]     :",
             initialValue: usePrefill ? defaultOutputPath : null,
             defaultValue: defaultConfigFile,
             showDefaultValue: false,
@@ -462,7 +462,7 @@ internal sealed class BootstrapWizard
         {
             var overwrite = PromptBool(
                 promptFactory,
-                "File already exists. Overwrite? [blue][[y/n]][/] [green](n)[/]                  :",
+                "File already exists. Overwrite? [blue][[y/n]][/] [green](n)[/]   :",
                 defaultValue: false,
                 showDefaultValue: false,
                 showChoices: false);
