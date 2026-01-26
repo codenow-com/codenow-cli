@@ -10,10 +10,6 @@ public static class DataPlaneConstants
     /// </summary>
     public const string StackName = "cn-data-plane";
 
-    /// <summary>
-    /// Operator info file name bundled with the manifests.
-    /// </summary>
-    public const string OperatorInfoFileName = "operator-info.json";
 
     /// <summary>
     /// Default data plane operator configuration file name.
@@ -26,15 +22,11 @@ public static class DataPlaneConstants
     public const string OperatorConfigSchemaV1Url =
         "https://codenow-com.github.io/codenow-cli/schemas/cn-data-plane-operator-config.v1.schema.json";
 
-    /// <summary>
-    /// Base name for the operator controller deployment.
-    /// </summary>
-    public const string OperatorDeploymentBaseName = "controller-manager";
 
     /// <summary>
-    /// Secret name for Pulumi operator configuration.
+    /// Secret name for operator configuration.
     /// </summary>
-    public const string PulumiOperatorConfigSecretName = "cn-data-plane-config";
+    public const string OperatorConfigSecretName = "cn-data-plane-config";
 
     /// <summary>
     /// Data plane config secret keys.
@@ -156,13 +148,14 @@ public static class DataPlaneConstants
     /// Label selector for the Pulumi operator pod.
     /// </summary>
     public const string OperatorPodLabelSelector =
-        "app.kubernetes.io/name=cn-pulumi-kubernetes-operator,app.kubernetes.io/part-of=cn-data-plane";
+        "app.kubernetes.io/name=" + PulumiOperatorAppLabelValue +
+        ",app.kubernetes.io/part-of=" + PartOfDataPlaneLabelValue;
 
     /// <summary>
-    /// Label selector for the data plane workspace pod.
+    /// Label selector for the data plane workspace pod (bootstrap-labeled).
     /// </summary>
     public const string WorkspacePodLabelSelector =
-        "app.kubernetes.io/name=cn-dp-manager,app.kubernetes.io/part-of=cn-data-plane";
+        "app.kubernetes.io/name=" + BootstrapAppLabelValue + ",app.kubernetes.io/part-of=" + PartOfDataPlaneLabelValue;
 
     /// <summary>
     /// Default service account name used by the data plane.
@@ -174,29 +167,34 @@ public static class DataPlaneConstants
     /// </summary>
     public const string PulumiStatePvcName = "cn-data-plane-state";
 
-    /// <summary>
-    /// Default Pulumi backend path for local state.
-    /// </summary>
-    public const string PulumiStatePath = "/pulumi-state";
 
     /// <summary>
-    /// App name label used by the data plane stack.
+    /// App name label value applied to bootstrap-generated data plane resources.
     /// </summary>
-    public const string PulumiStackLabel = "cn-dp-manager";
+    public const string BootstrapAppLabelValue = "cn-dp-bootstrap";
 
     /// <summary>
-    /// Prefix for Pulumi operator resource names.
+    /// Part-of label value for the data plane.
     /// </summary>
-    public const string PulumiOperatorNamePrefix = "cn-pulumi-";
+    public const string PartOfDataPlaneLabelValue = "cn-data-plane";
 
     /// <summary>
-    /// Prefix for Pulumi workspace resources.
+    /// Namespace type label value for the data plane system namespace.
     /// </summary>
-    public const string PulumiWorkspaceNamePrefix = "pulumi-";
+    public const string NamespaceTypeSystemLabelValue = "cn-data-plane-system";
 
     /// <summary>
-    /// Default home directory for the Pulumi container.
+    /// Pulumi operator app name label value.
     /// </summary>
-    public const string PulumiHomePath = "/home/pulumi";
+    public const string PulumiOperatorAppLabelValue = "cn-pulumi-kubernetes-operator";
+    /// <summary>
+    /// Default SCM branch used for data plane sources.
+    /// </summary>
+    public const string ScmGitRepositoryDefaultBranch = "master";
+    /// <summary>
+    /// Default FluxCD sync interval in seconds.
+    /// </summary>
+    public const int ScmGitRepositorySyncIntervalSeconds = 60;
+
 
 }

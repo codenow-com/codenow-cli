@@ -78,9 +78,11 @@ public static class Program
             });
             services.AddSingleton<IKubernetesClientFactory, KubernetesClientFactoryAdapter>();
             services.AddSingleton<YamlToJsonConverter>();
-            services.AddSingleton<IOperatorInfoProvider, OperatorInfoProvider>();
+            services.AddSingleton<IPulumiOperatorInfoProvider, PulumiOperatorInfoProvider>();
+            services.AddSingleton<IFluxCDInfoProvider, FluxCDInfoProvider>();
             services.AddSingleton<INamespaceProvisioner, NamespaceProvisioner>();
             services.AddSingleton<IPulumiOperatorProvisioner, PulumiOperatorProvisioner>();
+            services.AddSingleton<IFluxCDProvisioner, FluxCDProvisioner>();
             services.AddSingleton<DataPlaneConfigSecretBuilder>();
             services.AddSingleton<PulumiStackManifestBuilder>();
             services.AddSingleton<IPulumiStackProvisioner, PulumiStackProvisioner>();

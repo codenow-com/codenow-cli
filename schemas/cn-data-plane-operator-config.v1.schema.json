@@ -362,6 +362,7 @@
       "additionalProperties": true,
       "required": [
         "Images",
+        "InstallCrds",
         "Passphrase"
       ],
       "properties": {
@@ -381,8 +382,40 @@
             }
           }
         },
+        "InstallCrds": {
+          "type": "boolean"
+        },
         "Passphrase": {
           "type": "string"
+        }
+      }
+    },
+    "FluxCD": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "Enabled",
+        "InstallCrds",
+        "Images"
+      ],
+      "properties": {
+        "Enabled": {
+          "type": "boolean"
+        },
+        "InstallCrds": {
+          "type": "boolean"
+        },
+        "Images": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "SourceControllerVersion"
+          ],
+          "properties": {
+            "SourceControllerVersion": {
+              "type": "string"
+            }
+          }
         }
       }
     },

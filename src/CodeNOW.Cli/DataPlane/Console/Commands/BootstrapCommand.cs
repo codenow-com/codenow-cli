@@ -14,11 +14,16 @@ namespace CodeNOW.Cli.DataPlane.Console.Commands;
 /// <summary>
 /// CLI command for bootstrapping the Data Plane operator.
 /// </summary>
-public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapService bootstrapService)
+public class BootstrapCommand(
+    ILogger<BootstrapCommand> logger,
+    IBootstrapService bootstrapService,
+    IPulumiOperatorInfoProvider operatorInfoProvider,
+    IFluxCDInfoProvider fluxcdInfoProvider)
 {
     private readonly BootstrapConfigStore configStore = new();
     private readonly BootstrapWizard wizard = new();
-    private readonly PulumiOperatorInfoProvider operatorInfoProvider = new(logger);
+    private readonly IPulumiOperatorInfoProvider operatorInfoProvider = operatorInfoProvider;
+    private readonly IFluxCDInfoProvider fluxcdInfoProvider = fluxcdInfoProvider;
 
     /// <summary>
     /// Bootstraps the Kubernetes cluster for Data Plane installation.
@@ -26,15 +31,35 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
     /// <param name="config">
     /// Path to an existing Data Plane Operator configuration file. Encryption key must be provided via CN_DP_OPERATOR_ENCRYPTION_KEY.
     /// </param>
+    /// <param name="fluxcdEnable">Enable installation of FluxCD components. Applies only when generating a new config.</param>
+    /// <param name="fluxcdSkipCrds">Skip FluxCD CRD installation when FluxCD is enabled. Applies only when generating a new config.</param>
+    /// <param name="pulumiSkipCrds">Skip Pulumi operator CRD installation. Applies only when generating a new config.</param>
     /// <returns>Process exit code.</returns>
     [Command("bootstrap")]
-    /// <summary>
-    /// Runs the bootstrap flow to provision the data plane.
-    /// </summary>
-    public async Task<int> Bootstrap([HideDefaultValue] string config = "")
+    public async Task<int> Bootstrap(
+        [HideDefaultValue] string config = "",
+        bool fluxcdEnable = false,
+        bool fluxcdSkipCrds = false,
+        bool pulumiSkipCrds = false)
     {
         var configSource = ResolveConfigSource(config);
-        var result = await RunBootstrapFlowAsync(configSource, config);
+        var fluxcdEnableValue = false;
+        var fluxcdSkipCrdsValue = false;
+        var pulumiSkipCrdsValue = false;
+
+        if (configSource == ConfigSource.Generate)
+        {
+            fluxcdEnableValue = fluxcdEnable;
+            fluxcdSkipCrdsValue = fluxcdSkipCrds;
+            pulumiSkipCrdsValue = pulumiSkipCrds;
+        }
+
+        var result = await RunBootstrapFlowAsync(
+            configSource,
+            config,
+            fluxcdEnableValue,
+            fluxcdSkipCrdsValue,
+            pulumiSkipCrdsValue);
         if (!result.Success)
         {
             return result.ExitCode;
@@ -77,13 +102,21 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
     /// </summary>
     /// <param name="source">Source of the operator configuration.</param>
     /// <param name="configPath">Optional path to an existing configuration file.</param>
+    /// <param name="fluxcdEnable">Enable installation of FluxCD components.</param>
+    /// <param name="fluxcdSkipCrds">Skip FluxCD CRD installation when FluxCD is enabled.</param>
+    /// <param name="pulumiSkipCrds">Skip Pulumi operator CRD installation.</param>
     /// <returns>Result describing success or failure.</returns>
-    private async Task<Result> RunBootstrapFlowAsync(ConfigSource source, string configPath)
+    private async Task<Result> RunBootstrapFlowAsync(
+        ConfigSource source,
+        string configPath,
+        bool fluxcdEnable,
+        bool fluxcdSkipCrds,
+        bool pulumiSkipCrds)
     {
         return source switch
         {
-            ConfigSource.Generate => await RunSetupWizardAsync(),
-            ConfigSource.Existing => await UseExistingConfigAsync(configPath),
+            ConfigSource.Generate => await RunSetupWizardAsync(fluxcdEnable, fluxcdSkipCrds, pulumiSkipCrds),
+            ConfigSource.Existing => await UseExistingConfigAsync(configPath, fluxcdEnable, fluxcdSkipCrds, pulumiSkipCrds),
             _ => Result.Fail("Invalid configuration source.")
         };
     }
@@ -91,11 +124,17 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
     /// <summary>
     /// Runs the interactive setup wizard to generate or edit a configuration file.
     /// </summary>
+    /// <param name="fluxcdEnable">Enable installation of FluxCD components.</param>
+    /// <param name="fluxcdSkipCrds">Skip FluxCD CRD installation when FluxCD is enabled.</param>
+    /// <param name="pulumiSkipCrds">Skip Pulumi operator CRD installation.</param>
     /// <param name="existingConfig">Existing configuration used for prefilled edit mode.</param>
     /// <param name="defaultOutputPath">Default output path to suggest when saving.</param>
     /// <param name="encryptionKey">Optional existing encryption key to reuse.</param>
     /// <returns>Result describing success or failure.</returns>
     private async Task<Result> RunSetupWizardAsync(
+        bool fluxcdEnable,
+        bool fluxcdSkipCrds,
+        bool pulumiSkipCrds,
         OperatorConfig? existingConfig = null,
         string? defaultOutputPath = null,
         string? encryptionKey = null)
@@ -106,7 +145,11 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
             encryptionKey,
             DataPlaneConstants.OperatorConfigFileName,
             configStore,
-            operatorInfoProvider);
+            operatorInfoProvider,
+            fluxcdInfoProvider,
+            fluxcdEnable,
+            fluxcdSkipCrds,
+            pulumiSkipCrds);
         if (!result.Success || opConfig is null)
             return result;
 
@@ -119,8 +162,15 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
     /// optionally opening the edit wizard with prefilled values.
     /// </summary>
     /// <param name="configPath">Path to the existing configuration file or empty to prompt.</param>
+    /// <param name="fluxcdEnable">Enable installation of FluxCD components.</param>
+    /// <param name="fluxcdSkipCrds">Skip FluxCD CRD installation when FluxCD is enabled.</param>
+    /// <param name="pulumiSkipCrds">Skip Pulumi operator CRD installation.</param>
     /// <returns>Result describing success or failure.</returns>
-    private async Task<Result> UseExistingConfigAsync(string? configPath)
+    private async Task<Result> UseExistingConfigAsync(
+        string? configPath,
+        bool fluxcdEnable,
+        bool fluxcdSkipCrds,
+        bool pulumiSkipCrds)
     {
         const int MaxEncryptionKeyAttempts = 3;
         var resolveResult = ResolveConfigPath(configPath, out var filePath, out var fromArgs);
@@ -136,7 +186,7 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
             try
             {
                 var opConfig = configStore.LoadConfig(filePath, encryptionKey);
-                operatorInfoProvider.EnsurePulumiPluginsVersion(opConfig);
+                EnsurePulumiImageVersions(opConfig);
                 logger.LogInformation("Loaded configuration from {FilePath}.", filePath);
                 await BootstrapWithStatusAsync(opConfig);
                 return Result.Ok();
@@ -148,7 +198,12 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
             }
         }
 
-        return await TryLoadConfigWithRetries(filePath, MaxEncryptionKeyAttempts);
+        return await TryLoadConfigWithRetries(
+            filePath,
+            MaxEncryptionKeyAttempts,
+            fluxcdEnable,
+            fluxcdSkipCrds,
+            pulumiSkipCrds);
     }
 
     /// <summary>
@@ -178,6 +233,9 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
         AnsiConsole.MarkupLine("[grey]Please try again.[/]\n");
     }
 
+    /// <summary>
+    /// Resolves configuration path from arguments or interactive prompt.
+    /// </summary>
     private static Result? ResolveConfigPath(string? configPath, out string filePath, out bool fromArgs)
     {
         if (!string.IsNullOrWhiteSpace(configPath))
@@ -226,6 +284,9 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
         }
     }
 
+    /// <summary>
+    /// Loads the encryption key from the environment.
+    /// </summary>
     private static (Result? Result, string? EncryptionKey) GetEncryptionKeyFromEnv()
     {
         var encryptionKey = Environment.GetEnvironmentVariable(EnvironmentVariables.OperatorEncryptionKey);
@@ -244,7 +305,21 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
         return (Result.Fail(), null);
     }
 
-    private async Task<Result> TryLoadConfigWithRetries(string filePath, int maxAttempts)
+    /// <summary>
+    /// Attempts to load a configuration file with repeated encryption key prompts.
+    /// </summary>
+    /// <param name="filePath">Path to the encrypted configuration file.</param>
+    /// <param name="maxAttempts">Maximum number of decryption attempts.</param>
+    /// <param name="fluxcdEnable">Enable installation of FluxCD components.</param>
+    /// <param name="fluxcdSkipCrds">Skip FluxCD CRD installation when FluxCD is enabled.</param>
+    /// <param name="pulumiSkipCrds">Skip Pulumi operator CRD installation.</param>
+    /// <returns>Result describing success or failure.</returns>
+    private async Task<Result> TryLoadConfigWithRetries(
+        string filePath,
+        int maxAttempts,
+        bool fluxcdEnable,
+        bool fluxcdSkipCrds,
+        bool pulumiSkipCrds)
     {
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
             try
@@ -252,7 +327,7 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
                 string encryptionKey = AnsiConsole.Prompt(
                     new TextPrompt<string>("Encryption key for this configuration       :").Secret());
                 var opConfig = configStore.LoadConfig(filePath, encryptionKey);
-                operatorInfoProvider.EnsurePulumiPluginsVersion(opConfig);
+                EnsurePulumiImageVersions(opConfig);
                 logger.LogInformation("Loaded configuration from {FilePath}.", filePath);
                 var editExisting = AnsiConsole.Prompt(
                     new TextPrompt<bool>("Edit existing configuration? [blue][[y/n]][/] [green](n)[/]      :")
@@ -265,7 +340,13 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
                 if (editExisting)
                 {
                     AnsiConsole.WriteLine();
-                    return await RunSetupWizardAsync(opConfig, filePath, encryptionKey);
+                    return await RunSetupWizardAsync(
+                        fluxcdEnable,
+                        fluxcdSkipCrds,
+                        pulumiSkipCrds,
+                        opConfig,
+                        filePath,
+                        encryptionKey);
                 }
                 await BootstrapWithStatusAsync(opConfig);
                 return Result.Ok();
@@ -283,6 +364,9 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
         return Result.Fail();
     }
 
+    /// <summary>
+    /// Prints an error message in a standard format.
+    /// </summary>
     private static void PrintError(string message, string? details = null)
     {
         if (string.IsNullOrWhiteSpace(details))
@@ -292,6 +376,24 @@ public class BootstrapCommand(ILogger<BootstrapCommand> logger, IBootstrapServic
         }
 
         AnsiConsole.MarkupLine($"[red]Error: {message}\n{details}[/]\n");
+    }
+
+    /// <summary>
+    /// Ensures Pulumi image versions are populated when missing.
+    /// </summary>
+    private void EnsurePulumiImageVersions(OperatorConfig opConfig)
+    {
+        if (!string.IsNullOrWhiteSpace(opConfig.Pulumi.Images.RuntimeVersion) &&
+            !string.IsNullOrWhiteSpace(opConfig.Pulumi.Images.PluginsVersion))
+        {
+            return;
+        }
+
+        var info = operatorInfoProvider.GetInfo();
+        if (string.IsNullOrWhiteSpace(opConfig.Pulumi.Images.RuntimeVersion))
+            opConfig.Pulumi.Images.RuntimeVersion = info.RuntimeVersion;
+        if (string.IsNullOrWhiteSpace(opConfig.Pulumi.Images.PluginsVersion))
+            opConfig.Pulumi.Images.PluginsVersion = info.PluginsVersion;
     }
 
 }

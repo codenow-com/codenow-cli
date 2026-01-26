@@ -1,5 +1,7 @@
+using System.Text;
 using CodeNOW.Cli.Adapters.Kubernetes;
 using CodeNOW.Cli.Common.Yaml;
+using CodeNOW.Cli.DataPlane;
 using CodeNOW.Cli.DataPlane.Models;
 using CodeNOW.Cli.DataPlane.Services.Provisioning;
 using CodeNOW.Cli.Tests.TestDoubles.Kubernetes;
@@ -40,6 +42,146 @@ public class PulumiOperatorProvisionerTests
         await provisioner.WaitForOperatorReadyAsync(client, "ns", TimeSpan.FromSeconds(1));
     }
 
+    [Fact]
+    public async Task ApplyOperatorDeploymentAsync_SetsNamespaceImageAndLabels()
+    {
+        WriteManifests(
+            rbacYaml: "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: controller-manager\n",
+            crdYaml: "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: stacks.pulumi.com\n",
+            managerYaml:
+                """
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: controller-manager
+                spec:
+                  template:
+                    spec:
+                      serviceAccountName: controller-manager
+                      containers:
+                        - name: manager
+                          image: old
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: controller-manager
+                """);
+
+        var provisioner = BuildProvisioner();
+        var client = new FakeKubernetesClient();
+        var config = new OperatorConfig
+        {
+            Kubernetes = { Namespaces = { System = { Name = "system" } } },
+            ContainerRegistry = { Hostname = "registry.local" }
+        };
+
+        await provisioner.ApplyOperatorDeploymentAsync(client, config);
+
+        var deployment = client.AppliedObjects.OfType<V1Deployment>().Single();
+        Assert.Equal("system", deployment.Metadata?.NamespaceProperty);
+        Assert.Equal(
+            DataPlaneConstants.PulumiOperatorAppLabelValue,
+            deployment.Metadata?.Labels?["app.kubernetes.io/name"]);
+        Assert.StartsWith("registry.local/", deployment.Spec?.Template?.Spec?.Containers?.First().Image, StringComparison.Ordinal);
+
+        var service = client.AppliedObjects.OfType<V1Service>().Single();
+        Assert.Equal("system", service.Metadata?.NamespaceProperty);
+        Assert.Equal(
+            DataPlaneConstants.PulumiOperatorAppLabelValue,
+            service.Metadata?.Labels?["app.kubernetes.io/name"]);
+    }
+
+    [Fact]
+    public async Task ApplyCrdManifestsAsync_PatchesCustomResourceDefinitions()
+    {
+        WriteManifests(
+            rbacYaml: "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: controller-manager\n",
+            crdYaml:
+                """
+                apiVersion: apiextensions.k8s.io/v1
+                kind: CustomResourceDefinition
+                metadata:
+                  name: stacks.pulumi.com
+                ---
+                apiVersion: apiextensions.k8s.io/v1
+                kind: CustomResourceDefinition
+                metadata:
+                  name: programs.pulumi.com
+                """,
+            managerYaml: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: controller-manager\n");
+
+        var provisioner = BuildProvisioner();
+        var client = new FakeKubernetesClient();
+        var patched = new List<string>();
+        client.ApiextensionsV1.PatchCustomResourceDefinitionAsyncHandler = (patch, name, _, _) =>
+        {
+            patched.Add(name);
+            return Task.CompletedTask;
+        };
+
+        await provisioner.ApplyCrdManifestsAsync(client);
+
+        Assert.Contains("stacks.pulumi.com", patched);
+        Assert.Contains("programs.pulumi.com", patched);
+    }
+
+    [Fact]
+    public async Task ApplyRbacManifestsAsync_PrefixesNamesAndBindsNamespace()
+    {
+        WriteManifests(
+            rbacYaml:
+                """
+                apiVersion: v1
+                kind: ServiceAccount
+                metadata:
+                  name: controller-manager
+                ---
+                apiVersion: rbac.authorization.k8s.io/v1
+                kind: RoleBinding
+                metadata:
+                  name: controller-manager
+                subjects:
+                  - kind: ServiceAccount
+                    name: controller-manager
+                roleRef:
+                  apiGroup: rbac.authorization.k8s.io
+                  kind: Role
+                  name: controller-manager
+                """,
+            crdYaml: "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: stacks.pulumi.com\n",
+            managerYaml: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: controller-manager\n");
+
+        var provisioner = BuildProvisioner();
+        var client = new FakeKubernetesClient();
+
+        await provisioner.ApplyRbacManifestsAsync(client, "system");
+
+        var serviceAccounts = client.AppliedObjects.OfType<V1ServiceAccount>().ToList();
+        Assert.NotEmpty(serviceAccounts);
+        Assert.Contains(serviceAccounts, serviceAccount =>
+            string.Equals(serviceAccount.Metadata?.NamespaceProperty, "system", StringComparison.Ordinal) &&
+            serviceAccount.Metadata?.Name?.StartsWith(
+                PulumiOperatorProvisioner.PulumiOperatorNamePrefix,
+                StringComparison.Ordinal) == true);
+
+        var roleBindings = client.AppliedObjects.OfType<V1RoleBinding>().ToList();
+        Assert.NotEmpty(roleBindings);
+        Assert.Contains(roleBindings, roleBinding =>
+            string.Equals(roleBinding.Metadata?.NamespaceProperty, "system", StringComparison.Ordinal) &&
+            roleBinding.Metadata?.Name?.StartsWith(
+                PulumiOperatorProvisioner.PulumiOperatorNamePrefix,
+                StringComparison.Ordinal) == true &&
+            roleBinding.RoleRef.Name.StartsWith(
+                PulumiOperatorProvisioner.PulumiOperatorNamePrefix,
+                StringComparison.Ordinal) &&
+            roleBinding.Subjects.All(subject =>
+                string.Equals(subject.NamespaceProperty, "system", StringComparison.Ordinal) &&
+                subject.Name.StartsWith(
+                    PulumiOperatorProvisioner.PulumiOperatorNamePrefix,
+                    StringComparison.Ordinal)));
+    }
+
     private static PulumiOperatorProvisioner BuildProvisioner()
     {
         var logger = new NullLogger<PulumiOperatorProvisioner>();
@@ -48,8 +190,21 @@ public class PulumiOperatorProvisionerTests
         return new PulumiOperatorProvisioner(logger, yaml, infoProvider);
     }
 
-    private sealed class FakeOperatorInfoProvider : IOperatorInfoProvider
+    private sealed class FakeOperatorInfoProvider : IPulumiOperatorInfoProvider
     {
-        public OperatorInfo GetInfo() => new("operator", "1.2.3", "runtime", "plugins");
+        public PulumiOperatorInfo GetInfo() => new("operator", "1.2.3", "runtime", "3.2.1", "plugins", "9.9.9");
+    }
+
+    private static void WriteManifests(string rbacYaml, string crdYaml, string managerYaml)
+    {
+        var baseDir = AppContext.BaseDirectory;
+        var root = Path.Combine(baseDir, PulumiOperatorProvisioner.PulumiOperatorManifestsRelativePath);
+        Directory.CreateDirectory(Path.Combine(root, "rbac"));
+        Directory.CreateDirectory(Path.Combine(root, "crd"));
+        Directory.CreateDirectory(Path.Combine(root, "manager"));
+
+        File.WriteAllText(Path.Combine(root, "rbac", "rbac.yaml"), rbacYaml);
+        File.WriteAllText(Path.Combine(root, "crd", "crd.yaml"), crdYaml);
+        File.WriteAllText(Path.Combine(root, "manager", "manager.yaml"), managerYaml);
     }
 }

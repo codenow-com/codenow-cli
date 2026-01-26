@@ -19,7 +19,15 @@ public static class KubernetesManifestTools
     /// <summary>
     /// Builds a JSON patch for creating or updating a namespace.
     /// </summary>
-    public static string BuildNamespacePatch(string name, IDictionary<string, string>? annotations = null)
+    /// <param name="name">Namespace name.</param>
+    /// <param name="namespaceTypeLabelValue">Label value for <see cref="KubernetesConstants.Labels.NamespaceType"/>.</param>
+    /// <param name="partOfLabelValue">Label value for <c>app.kubernetes.io/part-of</c>.</param>
+    /// <param name="annotations">Optional annotations to include.</param>
+    public static string BuildNamespacePatch(
+        string name,
+        string namespaceTypeLabelValue,
+        string partOfLabelValue,
+        IDictionary<string, string>? annotations = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Namespace name cannot be empty.", nameof(name));
@@ -29,10 +37,9 @@ public static class KubernetesManifestTools
             ["name"] = name,
             ["labels"] = new JsonObject
             {
-                [KubernetesConstants.Labels.NamespaceType] =
-                    KubernetesConstants.LabelValues.NamespaceTypeDataPlaneSystem,
+                [KubernetesConstants.Labels.NamespaceType] = namespaceTypeLabelValue,
                 ["app.kubernetes.io/managed-by"] = KubernetesConstants.LabelValues.ManagedBy,
-                ["app.kubernetes.io/part-of"] = KubernetesConstants.LabelValues.PartOf
+                ["app.kubernetes.io/part-of"] = partOfLabelValue
             }
         };
 

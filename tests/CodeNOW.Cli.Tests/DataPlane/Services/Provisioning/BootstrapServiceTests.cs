@@ -14,6 +14,7 @@ public class BootstrapServiceTests
         var config = new OperatorConfig();
         var factory = new FakeKubernetesClientFactory();
         var namespaces = new FakeNamespaceProvisioner();
+        var fluxcdProvisioner = new FakeFluxCDProvisioner();
         var operatorProvisioner = new FakePulumiOperatorProvisioner();
         var stackProvisioner = new FakePulumiStackProvisioner();
 
@@ -22,6 +23,7 @@ public class BootstrapServiceTests
             factory,
             new KubernetesConnectionOptions(),
             namespaces,
+            fluxcdProvisioner,
             operatorProvisioner,
             stackProvisioner);
 
@@ -36,11 +38,14 @@ public class BootstrapServiceTests
     }
 
     [Fact]
-    public async Task BootstrapAsync_CreatesClientOnce()
+    public async Task BootstrapAsync_SkipsPulumiCrdsWhenDisabled()
     {
         var config = new OperatorConfig();
+        config.Pulumi.InstallCrds = false;
+
         var factory = new FakeKubernetesClientFactory();
         var namespaces = new FakeNamespaceProvisioner();
+        var fluxcdProvisioner = new FakeFluxCDProvisioner();
         var operatorProvisioner = new FakePulumiOperatorProvisioner();
         var stackProvisioner = new FakePulumiStackProvisioner();
 
@@ -49,6 +54,102 @@ public class BootstrapServiceTests
             factory,
             new KubernetesConnectionOptions(),
             namespaces,
+            fluxcdProvisioner,
+            operatorProvisioner,
+            stackProvisioner);
+
+        await service.BootstrapAsync(config);
+
+        Assert.False(operatorProvisioner.AppliedCrds);
+    }
+
+    [Fact]
+    public async Task BootstrapAsync_WaitsForFluxcdCrdsBeforeSourceController()
+    {
+        var config = new OperatorConfig();
+        config.FluxCD = new FluxCDConfig
+        {
+            Enabled = true,
+            InstallCrds = true
+        };
+
+        var factory = new FakeKubernetesClientFactory();
+        var namespaces = new FakeNamespaceProvisioner();
+        var fluxcdProvisioner = new SequencedFluxCDProvisioner();
+        var operatorProvisioner = new FakePulumiOperatorProvisioner();
+        var stackProvisioner = new FakePulumiStackProvisioner();
+
+        var service = new BootstrapService(
+            new NullLogger<BootstrapService>(),
+            factory,
+            new KubernetesConnectionOptions(),
+            namespaces,
+            fluxcdProvisioner,
+            operatorProvisioner,
+            stackProvisioner);
+
+        var bootstrapTask = service.BootstrapAsync(config);
+
+        await fluxcdProvisioner.CrdStarted.Task;
+        Assert.False(fluxcdProvisioner.SourceControllerCalled);
+
+        fluxcdProvisioner.AllowCrdComplete.SetResult(true);
+        await bootstrapTask;
+
+        Assert.True(fluxcdProvisioner.SourceControllerCalled);
+        Assert.False(fluxcdProvisioner.SourceControllerCalledBeforeCrdComplete);
+    }
+
+    [Fact]
+    public async Task BootstrapAsync_WaitsForRbacAndCrdsBeforeDeployment()
+    {
+        var config = new OperatorConfig();
+        config.Pulumi.InstallCrds = true;
+
+        var factory = new FakeKubernetesClientFactory();
+        var namespaces = new FakeNamespaceProvisioner();
+        var fluxcdProvisioner = new FakeFluxCDProvisioner();
+        var operatorProvisioner = new SequencedPulumiOperatorProvisioner();
+        var stackProvisioner = new FakePulumiStackProvisioner();
+
+        var service = new BootstrapService(
+            new NullLogger<BootstrapService>(),
+            factory,
+            new KubernetesConnectionOptions(),
+            namespaces,
+            fluxcdProvisioner,
+            operatorProvisioner,
+            stackProvisioner);
+
+        var bootstrapTask = service.BootstrapAsync(config);
+
+        Assert.False(operatorProvisioner.DeploymentCalled);
+
+        operatorProvisioner.AllowRbacComplete.SetResult(true);
+        operatorProvisioner.AllowCrdsComplete.SetResult(true);
+
+        await bootstrapTask;
+
+        Assert.True(operatorProvisioner.DeploymentCalled);
+        Assert.True(operatorProvisioner.DeploymentCalledAfterRbacAndCrds);
+    }
+
+    [Fact]
+    public async Task BootstrapAsync_CreatesClientOnce()
+    {
+        var config = new OperatorConfig();
+        var factory = new FakeKubernetesClientFactory();
+        var namespaces = new FakeNamespaceProvisioner();
+        var fluxcdProvisioner = new FakeFluxCDProvisioner();
+        var operatorProvisioner = new FakePulumiOperatorProvisioner();
+        var stackProvisioner = new FakePulumiStackProvisioner();
+
+        var service = new BootstrapService(
+            new NullLogger<BootstrapService>(),
+            factory,
+            new KubernetesConnectionOptions(),
+            namespaces,
+            fluxcdProvisioner,
             operatorProvisioner,
             stackProvisioner);
 
@@ -113,6 +214,46 @@ public class BootstrapServiceTests
         public string GetOperatorImage(OperatorConfig config) => "image";
     }
 
+    private sealed class FakeFluxCDProvisioner : IFluxCDProvisioner
+    {
+        public Task ApplyCrdManifestsAsync(IKubernetesClient client, OperatorConfig config)
+            => Task.CompletedTask;
+
+        public Task ApplySourceControllerAsync(IKubernetesClient client, OperatorConfig config)
+            => Task.CompletedTask;
+
+        public Task WaitForSourceControllerReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout)
+            => Task.CompletedTask;
+    }
+
+    private sealed class SequencedFluxCDProvisioner : IFluxCDProvisioner
+    {
+        public TaskCompletionSource<bool> CrdStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> AllowCrdComplete { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool SourceControllerCalled { get; private set; }
+        public bool SourceControllerCalledBeforeCrdComplete { get; private set; }
+
+        public Task ApplyCrdManifestsAsync(IKubernetesClient client, OperatorConfig config)
+        {
+            CrdStarted.TrySetResult(true);
+            return AllowCrdComplete.Task;
+        }
+
+        public Task ApplySourceControllerAsync(IKubernetesClient client, OperatorConfig config)
+        {
+            SourceControllerCalled = true;
+            SourceControllerCalledBeforeCrdComplete = !AllowCrdComplete.Task.IsCompleted;
+            return Task.CompletedTask;
+        }
+
+        public Task WaitForSourceControllerReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout)
+            => Task.CompletedTask;
+    }
+
     private sealed class FakePulumiStackProvisioner : IPulumiStackProvisioner
     {
         public bool AppliedStack { get; private set; }
@@ -136,5 +277,36 @@ public class BootstrapServiceTests
 
         public Task CreatePulumiStatePvcAsync(IKubernetesClient client, OperatorConfig config)
             => Task.CompletedTask;
+    }
+
+    private sealed class SequencedPulumiOperatorProvisioner : IPulumiOperatorProvisioner
+    {
+        public TaskCompletionSource<bool> AllowCrdsComplete { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> AllowRbacComplete { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool DeploymentCalled { get; private set; }
+        public bool DeploymentCalledAfterRbacAndCrds { get; private set; }
+
+        public Task ApplyCrdManifestsAsync(IKubernetesClient client)
+            => AllowCrdsComplete.Task;
+
+        public Task ApplyRbacManifestsAsync(IKubernetesClient client, string targetNamespace)
+            => AllowRbacComplete.Task;
+
+        public Task ApplyOperatorDeploymentAsync(IKubernetesClient client, OperatorConfig config)
+        {
+            DeploymentCalled = true;
+            DeploymentCalledAfterRbacAndCrds =
+                AllowCrdsComplete.Task.IsCompleted && AllowRbacComplete.Task.IsCompleted;
+            return Task.CompletedTask;
+        }
+
+        public Task WaitForOperatorReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout)
+            => Task.CompletedTask;
+
+        public string GetOperatorImage(OperatorConfig config) => "image";
     }
 }

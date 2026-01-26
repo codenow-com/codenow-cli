@@ -143,7 +143,7 @@ internal sealed class DataPlaneConfigSecretBuilder
         {
             Metadata = new V1ObjectMeta
             {
-                Name = DataPlaneConstants.PulumiOperatorConfigSecretName,
+                Name = DataPlaneConstants.OperatorConfigSecretName,
                 NamespaceProperty = config.Kubernetes.Namespaces.System.Name
             },
             Type = "Opaque",
@@ -151,6 +151,9 @@ internal sealed class DataPlaneConfigSecretBuilder
         };
     }
 
+    /// <summary>
+    /// Builds an .npmrc file contents for the configured registry.
+    /// </summary>
     private static string BuildNpmrc(NpmRegistryConfig npmRegistry)
     {
         if (string.IsNullOrWhiteSpace(npmRegistry.Url) ||

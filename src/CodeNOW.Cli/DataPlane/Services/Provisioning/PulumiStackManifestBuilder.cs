@@ -11,6 +11,15 @@ namespace CodeNOW.Cli.DataPlane.Services.Provisioning;
 /// </summary>
 internal sealed class PulumiStackManifestBuilder
 {
+    /// <summary>
+    /// Default home directory for the Pulumi container.
+    /// </summary>
+    internal const string PulumiHomePath = "/home/pulumi";
+    /// <summary>
+    /// Default Pulumi backend path for local state.
+    /// </summary>
+    internal const string PulumiStatePath = "/pulumi-state";
+
     private readonly IPulumiOperatorProvisioner operatorProvisioner;
     private readonly DataPlaneConfigSecretBuilder configSecretBuilder;
     private readonly string runtimeImage;
@@ -22,7 +31,7 @@ internal sealed class PulumiStackManifestBuilder
     public PulumiStackManifestBuilder(
         IPulumiOperatorProvisioner operatorProvisioner,
         DataPlaneConfigSecretBuilder configSecretBuilder,
-        IOperatorInfoProvider operatorInfoProvider)
+        IPulumiOperatorInfoProvider operatorInfoProvider)
     {
         this.operatorProvisioner = operatorProvisioner;
         this.configSecretBuilder = configSecretBuilder;
@@ -32,7 +41,7 @@ internal sealed class PulumiStackManifestBuilder
     }
 
     /// <summary>
-    /// Builds the Pulumi stack custom resource manifest.
+    /// Builds the Pulumi stack custom resource manifest, including FluxCD wiring when enabled.
     /// </summary>
     /// <param name="config">Operator configuration values.</param>
     /// <param name="serviceAccountName">Service account used by the stack.</param>
@@ -41,11 +50,9 @@ internal sealed class PulumiStackManifestBuilder
     {
         var stackName = DataPlaneConstants.StackName;
         var image = BuildPulumiImage(config);
-        var branchName = "master";
-        var repoDir = config.Environment.Name;
         var backendUrl = config.S3.Enabled
             ? config.S3.Url
-            : $"file:///{DataPlaneConstants.PulumiStatePath}";
+            : $"file:///{PulumiStatePath}";
 
         var stack = new JsonObject
         {
@@ -60,9 +67,6 @@ internal sealed class PulumiStackManifestBuilder
             {
                 ["serviceAccountName"] = serviceAccountName,
                 ["stack"] = stackName,
-                ["projectRepo"] = config.Scm.Url,
-                ["repoDir"] = repoDir,
-                ["branch"] = $"refs/heads/{branchName}",
                 ["backend"] = backendUrl,
                 ["envRefs"] = new JsonObject
                 {
@@ -70,7 +74,7 @@ internal sealed class PulumiStackManifestBuilder
                     {
                         ["literal"] = new JsonObject
                         {
-                            ["value"] = DataPlaneConstants.PulumiHomePath
+                            ["value"] = PulumiHomePath
                         },
                         ["type"] = "Literal"
                     }
@@ -80,7 +84,7 @@ internal sealed class PulumiStackManifestBuilder
                         ["type"] = "Secret",
                         ["secret"] = new JsonObject
                         {
-                            ["name"] = DataPlaneConstants.PulumiOperatorConfigSecretName,
+                            ["name"] = DataPlaneConstants.OperatorConfigSecretName,
                             ["key"] = DataPlaneConstants.DataPlaneConfigKeyPulumiPassphrase
                         }
                     }
@@ -91,6 +95,22 @@ internal sealed class PulumiStackManifestBuilder
             }
         };
 
+        if (config.FluxCD?.Enabled != true)
+        {
+            stack.Set("spec.projectRepo", config.Scm.Url);
+            stack.Set("spec.repoDir", config.Environment.Name);
+            stack.Set("spec.resyncFrequencySeconds", DataPlaneConstants.ScmGitRepositorySyncIntervalSeconds);
+            stack.Set("spec.branch", $"refs/heads/{DataPlaneConstants.ScmGitRepositoryDefaultBranch}");
+        }
+        else
+        {
+            // FluxCD provides sources; Pulumi stack references the GitRepository instead of direct SCM fields.
+            stack.Set("spec.fluxSource.sourceRef.apiVersion", "source.toolkit.fluxcd.io/v1");
+            stack.Set("spec.fluxSource.sourceRef.kind", "GitRepository");
+            stack.Set("spec.fluxSource.sourceRef.name", FluxCDProvisioner.FluxcdGitRepositoryName);
+            stack.Set("spec.fluxSource.dir", config.Environment.Name);
+        }
+
         if (config.S3.Enabled && config.S3.AuthenticationMethod == S3AuthenticationMethod.AccessKeySecretKey)
         {
             var envRefs = JsonManifestEditor.EnsureObjectPath(stack, "spec.envRefs");
@@ -99,7 +119,7 @@ internal sealed class PulumiStackManifestBuilder
                 ["type"] = "Secret",
                 ["secret"] = new JsonObject
                 {
-                    ["name"] = DataPlaneConstants.PulumiOperatorConfigSecretName,
+                    ["name"] = DataPlaneConstants.OperatorConfigSecretName,
                     ["key"] = DataPlaneConstants.DataPlaneConfigKeyS3StorageAccessKey
                 }
             };
@@ -108,7 +128,7 @@ internal sealed class PulumiStackManifestBuilder
                 ["type"] = "Secret",
                 ["secret"] = new JsonObject
                 {
-                    ["name"] = DataPlaneConstants.PulumiOperatorConfigSecretName,
+                    ["name"] = DataPlaneConstants.OperatorConfigSecretName,
                     ["key"] = DataPlaneConstants.DataPlaneConfigKeyS3StorageSecretKey
                 }
             };
@@ -171,21 +191,24 @@ internal sealed class PulumiStackManifestBuilder
     }
 
     /// <summary>
-    /// Applies stack labels to a Kubernetes object metadata instance.
+    /// Applies bootstrap labels to a Kubernetes object metadata instance.
     /// </summary>
     public void ApplyStackLabels(V1ObjectMeta? metadata)
     {
-        KubernetesManifestTools.ApplyLabels(metadata, StackLabels);
+        KubernetesManifestTools.ApplyLabels(metadata, ProvisioningCommonTools.BootstrapLabels);
     }
 
     /// <summary>
-    /// Applies stack labels to a JSON object metadata path.
+    /// Applies bootstrap labels to a JSON object metadata path.
     /// </summary>
     public void ApplyStackLabels(JsonObject jsonObj)
     {
-        KubernetesManifestTools.ApplyLabels(jsonObj, "metadata", StackLabels);
+        KubernetesManifestTools.ApplyLabels(jsonObj, "metadata", ProvisioningCommonTools.BootstrapLabels);
     }
 
+    /// <summary>
+    /// Builds a JSON array from non-null nodes.
+    /// </summary>
     private static JsonArray BuildJsonArray(params JsonNode?[] nodes)
     {
         var array = new JsonArray();
@@ -199,6 +222,9 @@ internal sealed class PulumiStackManifestBuilder
         return array;
     }
 
+    /// <summary>
+    /// Builds the workspace template used by the Pulumi stack.
+    /// </summary>
     private JsonObject BuildPulumiWorkspaceTemplate(OperatorConfig config, string image)
     {
         var podSpec = new JsonObject
@@ -222,46 +248,14 @@ internal sealed class PulumiStackManifestBuilder
                 {
                     ["name"] = "pulumi",
                     ["volumeMounts"] = BuildJsonArray(
-                        BuildServiceAccountVolumeMount())
+                        ProvisioningCommonTools.BuildServiceAccountVolumeMount())
                 }),
             ["volumes"] = BuildJsonArray(
-                BuildServiceAccountVolume())
+                ProvisioningCommonTools.BuildServiceAccountVolume())
 
         };
 
-        if (config.Kubernetes.PodPlacementMode == PodPlacementMode.NodeSelectorAndTaints)
-        {
-            podSpec["tolerations"] = BuildJsonArray(
-                new JsonObject
-                {
-                    ["effect"] = "NoExecute",
-                    ["key"] = config.Kubernetes.NodeLabels.System.Key,
-                    ["operator"] = "Equal",
-                    ["value"] = config.Kubernetes.NodeLabels.System.Value
-                });
-
-            podSpec["affinity"] = new JsonObject
-            {
-                ["nodeAffinity"] = new JsonObject
-                {
-                    ["requiredDuringSchedulingIgnoredDuringExecution"] = new JsonObject
-                    {
-                        ["nodeSelectorTerms"] = BuildJsonArray(
-                            new JsonObject
-                            {
-                                ["matchExpressions"] = BuildJsonArray(
-                                    new JsonObject
-                                    {
-                                        ["key"] = config.Kubernetes.NodeLabels.System.Key,
-                                        ["operator"] = "In",
-                                        ["values"] = BuildJsonArray(
-                                            JsonValue.Create(config.Kubernetes.NodeLabels.System.Value))
-                                    })
-                            })
-                    }
-                }
-            };
-        }
+        ProvisioningCommonTools.ApplySystemNodePlacement(podSpec, config);
 
         var workspaceTemplate = new JsonObject
         {
@@ -296,17 +290,26 @@ internal sealed class PulumiStackManifestBuilder
         return workspaceTemplate;
     }
 
+    /// <summary>
+    /// Applies bootstrap labels to the given metadata path.
+    /// </summary>
+    /// <summary>
+    /// Applies bootstrap labels to the given metadata path.
+    /// </summary>
     private static void ApplySystemLabelsToPath(JsonObject root, string path)
     {
-        KubernetesManifestTools.ApplyLabels(root, path, StackLabels);
+        KubernetesManifestTools.ApplyLabels(root, path, ProvisioningCommonTools.BootstrapLabels);
     }
 
+    /// <summary>
+    /// Populates secret references, SCM auth (when FluxCD is disabled), and environment metadata for the stack.
+    /// </summary>
     private static void ApplyPulumiStackSecrets(JsonObject stack, OperatorConfig config)
     {
         if (stack["spec"] is not JsonObject spec)
             return;
 
-        var secretName = DataPlaneConstants.PulumiOperatorConfigSecretName;
+        var secretName = DataPlaneConstants.OperatorConfigSecretName;
         var secretsRef = JsonManifestEditor.EnsureObjectPath(spec, "secretsRef");
         var scm = config.Scm;
         var s3AccessKey = string.Empty;
@@ -350,48 +353,51 @@ internal sealed class PulumiStackManifestBuilder
             };
         }
 
-        if (scm.AuthenticationMethod == ScmAuthenticationMethod.AccessToken)
+        if (config.FluxCD?.Enabled != true)
         {
-            spec["gitAuth"] = new JsonObject
+            if (scm.AuthenticationMethod == ScmAuthenticationMethod.AccessToken)
             {
-                ["accessToken"] = new JsonObject
+                spec["gitAuth"] = new JsonObject
                 {
-                    ["type"] = "Secret",
-                    ["secret"] = new JsonObject
+                    ["accessToken"] = new JsonObject
                     {
-                        ["name"] = secretName,
-                        ["key"] = DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthToken
+                        ["type"] = "Secret",
+                        ["secret"] = new JsonObject
+                        {
+                            ["name"] = secretName,
+                            ["key"] = DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthToken
+                        }
                     }
-                }
-            };
-        }
+                };
+            }
 
-        if (scm.AuthenticationMethod == ScmAuthenticationMethod.UsernamePassword)
-        {
-            spec["gitAuth"] = new JsonObject
+            if (scm.AuthenticationMethod == ScmAuthenticationMethod.UsernamePassword)
             {
-                ["basicAuth"] = new JsonObject
+                spec["gitAuth"] = new JsonObject
                 {
-                    ["password"] = new JsonObject
+                    ["basicAuth"] = new JsonObject
                     {
-                        ["type"] = "Secret",
-                        ["secret"] = new JsonObject
+                        ["password"] = new JsonObject
                         {
-                            ["name"] = secretName,
-                            ["key"] = DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthPassword
-                        }
-                    },
-                    ["userName"] = new JsonObject
-                    {
-                        ["type"] = "Secret",
-                        ["secret"] = new JsonObject
+                            ["type"] = "Secret",
+                            ["secret"] = new JsonObject
+                            {
+                                ["name"] = secretName,
+                                ["key"] = DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthPassword
+                            }
+                        },
+                        ["userName"] = new JsonObject
                         {
-                            ["name"] = secretName,
-                            ["key"] = DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthUsername
+                            ["type"] = "Secret",
+                            ["secret"] = new JsonObject
+                            {
+                                ["name"] = secretName,
+                                ["key"] = DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthUsername
+                            }
                         }
                     }
-                }
-            };
+                };
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(config.Scm.AccessToken))
@@ -446,6 +452,9 @@ internal sealed class PulumiStackManifestBuilder
             AddSecretEnvRef(DataPlaneConstants.DataPlaneConfigKeyNodePlacementMode);
     }
 
+    /// <summary>
+    /// Configures the main Pulumi container and shared volumes.
+    /// </summary>
     private void ConfigurePulumiContainer(JsonObject stack, OperatorConfig config)
     {
         var podSpec = JsonManifestEditor.EnsureObjectPath(stack, "spec.workspaceTemplate.spec.podTemplate.spec");
@@ -462,14 +471,14 @@ internal sealed class PulumiStackManifestBuilder
 
         var volumeMounts = JsonManifestEditor.EnsureArray(pulumiContainer, "volumeMounts");
         EnsureVolumeMount(volumeMounts, "tmp", "/tmp", null, false);
-        EnsureVolumeMount(volumeMounts, "npmrc", $"{DataPlaneConstants.PulumiHomePath}/.npmrc", ".npmrc", true);
-        EnsureVolumeMount(volumeMounts, "pulumi", DataPlaneConstants.PulumiHomePath, null, false);
+        EnsureVolumeMount(volumeMounts, "npmrc", $"{PulumiHomePath}/.npmrc", ".npmrc", true);
+        EnsureVolumeMount(volumeMounts, "pulumi", PulumiHomePath, null, false);
         if (!config.S3.Enabled)
-            EnsureVolumeMount(volumeMounts, "pulumi-state", DataPlaneConstants.PulumiStatePath, null, false);
+            EnsureVolumeMount(volumeMounts, "pulumi-state", PulumiStatePath, null, false);
         EnsureVolumeMount(
             volumeMounts,
             "docker-auth",
-            $"{DataPlaneConstants.PulumiHomePath}/.docker/config.json",
+            $"{PulumiHomePath}/.docker/config.json",
             "config.json",
             true);
         if (!string.IsNullOrWhiteSpace(config.Security.CustomCaBase64))
@@ -481,29 +490,35 @@ internal sealed class PulumiStackManifestBuilder
                 DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert,
                 true);
         }
-        EnsureProxyEnv(pulumiContainer, config);
+        ProvisioningCommonTools.EnsureProxyEnv(pulumiContainer, config);
         var volumes = JsonManifestEditor.EnsureArray(podSpec, "volumes");
-        EnsureSecretVolume(volumes, "npmrc", DataPlaneConstants.PulumiOperatorConfigSecretName);
+        EnsureSecretVolume(volumes, "npmrc", DataPlaneConstants.OperatorConfigSecretName);
         EnsureEmptyDirVolume(volumes, "pulumi");
         EnsureEmptyDirVolume(volumes, "tmp");
         if (!config.S3.Enabled)
             EnsurePersistentVolumeClaimVolume(volumes, "pulumi-state", DataPlaneConstants.PulumiStatePvcName);
-        EnsureSecretVolume(volumes, "docker-auth", DataPlaneConstants.PulumiOperatorConfigSecretName);
+        EnsureSecretVolume(volumes, "docker-auth", DataPlaneConstants.OperatorConfigSecretName);
         if (!string.IsNullOrWhiteSpace(config.Security.CustomCaBase64))
         {
             EnsureSecretVolumeWithItem(
                 volumes,
                 "ca-certificates",
-                DataPlaneConstants.PulumiOperatorConfigSecretName,
+                DataPlaneConstants.OperatorConfigSecretName,
                 DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert);
         }
     }
 
+    /// <summary>
+    /// Configures the bootstrap init container.
+    /// </summary>
     private void ConfigureBootstrapContainer(JsonObject stack, OperatorConfig config)
     {
         ConfigureInitContainer(stack, config, "bootstrap");
     }
 
+    /// <summary>
+    /// Configures the fetch init container used for source checkout.
+    /// </summary>
     private void ConfigureFetchContainer(JsonObject stack, OperatorConfig config)
     {
         ConfigureInitContainer(stack, config, "fetch");
@@ -513,9 +528,10 @@ internal sealed class PulumiStackManifestBuilder
         if (container is null)
             return;
 
+        var volumeMounts = JsonManifestEditor.EnsureArray(container, "volumeMounts");
+        EnsureVolumeMount(volumeMounts, "tmp", "/tmp", null, false);
         if (!string.IsNullOrWhiteSpace(config.Security.CustomCaBase64))
-        {
-            var volumeMounts = JsonManifestEditor.EnsureArray(container, "volumeMounts");
+        {  
             EnsureVolumeMount(
                 volumeMounts,
                 "ca-certificates",
@@ -523,9 +539,12 @@ internal sealed class PulumiStackManifestBuilder
                 DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert,
                 true);
         }
-        EnsureProxyEnv(container, config);
+        ProvisioningCommonTools.EnsureProxyEnv(container, config);
     }
 
+    /// <summary>
+    /// Configures the init container that installs Pulumi plugins.
+    /// </summary>
     private void ConfigureInstallPluginsContainer(JsonObject stack, OperatorConfig config)
     {
         var podSpec = JsonManifestEditor.EnsureObjectPath(stack, "spec.workspaceTemplate.spec.podTemplate.spec");
@@ -558,16 +577,19 @@ internal sealed class PulumiStackManifestBuilder
             JsonValue.Create("sh"),
             JsonValue.Create("-c"),
             JsonValue.Create(
-                $"mkdir -p {DataPlaneConstants.PulumiHomePath}/.pulumi/plugins\n" +
-                $"cp -f -r /data/.pulumi/plugins/. {DataPlaneConstants.PulumiHomePath}/.pulumi/plugins/\n"));
+                $"mkdir -p {PulumiHomePath}/.pulumi/plugins\n" +
+                $"cp -f -r /data/.pulumi/plugins/. {PulumiHomePath}/.pulumi/plugins/\n"));
         container["volumeMounts"] = BuildJsonArray(
             new JsonObject
             {
                 ["name"] = "pulumi",
-                ["mountPath"] = DataPlaneConstants.PulumiHomePath
+                ["mountPath"] = PulumiHomePath
             });
     }
 
+    /// <summary>
+    /// Initializes common settings for named init containers.
+    /// </summary>
     private void ConfigureInitContainer(JsonObject stack, OperatorConfig config, string name)
     {
         var podSpec = JsonManifestEditor.EnsureObjectPath(stack, "spec.workspaceTemplate.spec.podTemplate.spec");
@@ -598,6 +620,9 @@ internal sealed class PulumiStackManifestBuilder
         };
     }
 
+    /// <summary>
+    /// Ensures a volume mount exists on the container.
+    /// </summary>
     private static void EnsureVolumeMount(
         JsonArray volumeMounts,
         string name,
@@ -621,6 +646,9 @@ internal sealed class PulumiStackManifestBuilder
         volumeMounts.Add((JsonNode)mount);
     }
 
+    /// <summary>
+    /// Ensures a secret volume exists.
+    /// </summary>
     private static void EnsureSecretVolume(JsonArray volumes, string name, string secretName)
     {
         if (JsonManifestEditor.HasNamedObject(volumes, name))
@@ -636,6 +664,9 @@ internal sealed class PulumiStackManifestBuilder
         });
     }
 
+    /// <summary>
+    /// Ensures a secret volume exists with a single item mapping.
+    /// </summary>
     private static void EnsureSecretVolumeWithItem(
         JsonArray volumes,
         string name,
@@ -661,21 +692,9 @@ internal sealed class PulumiStackManifestBuilder
         });
     }
 
-    private static void EnsureProxyEnv(JsonObject container, OperatorConfig config)
-    {
-        if (!config.HttpProxy.Enabled)
-            return;
-        if (string.IsNullOrWhiteSpace(config.HttpProxy.Hostname) || !config.HttpProxy.Port.HasValue)
-            return;
-
-        var proxyValue = $"{config.HttpProxy.Hostname}:{config.HttpProxy.Port.Value}";
-        var env = JsonManifestEditor.EnsureArray(container, "env");
-        JsonManifestEditor.EnsureEnvVar(env, "HTTP_PROXY", proxyValue);
-        JsonManifestEditor.EnsureEnvVar(env, "HTTPS_PROXY", proxyValue);
-        if (!string.IsNullOrWhiteSpace(config.HttpProxy.NoProxy))
-            JsonManifestEditor.EnsureEnvVar(env, "NO_PROXY", config.HttpProxy.NoProxy);
-    }
-
+    /// <summary>
+    /// Ensures an emptyDir volume exists.
+    /// </summary>
     private static void EnsureEmptyDirVolume(JsonArray volumes, string name)
     {
         if (JsonManifestEditor.HasNamedObject(volumes, name))
@@ -688,6 +707,9 @@ internal sealed class PulumiStackManifestBuilder
         });
     }
 
+    /// <summary>
+    /// Ensures a persistent volume claim volume exists.
+    /// </summary>
     private static void EnsurePersistentVolumeClaimVolume(
         JsonArray volumes,
         string name,
@@ -706,6 +728,9 @@ internal sealed class PulumiStackManifestBuilder
         });
     }
 
+    /// <summary>
+    /// Builds the Pulumi runtime image reference.
+    /// </summary>
     private string BuildPulumiImage(OperatorConfig config)
     {
         var baseImage = $"{runtimeImage}:{config.Pulumi.Images.RuntimeVersion}";
@@ -715,6 +740,9 @@ internal sealed class PulumiStackManifestBuilder
         return $"{config.ContainerRegistry.Hostname.TrimEnd('/')}/{baseImage}";
     }
 
+    /// <summary>
+    /// Builds the Pulumi plugins image reference.
+    /// </summary>
     private string BuildPulumiOperatorPluginsImage(OperatorConfig config)
     {
         var baseImage = pluginsImage;
@@ -726,66 +754,5 @@ internal sealed class PulumiStackManifestBuilder
 
         return $"{config.ContainerRegistry.Hostname.TrimEnd('/')}/{baseImage}";
     }
-
-    private static JsonObject BuildServiceAccountVolume()
-    {
-        return JsonNode.Parse("""
-        {
-          "name": "serviceaccount-token",
-          "projected": {
-            "defaultMode": 292,
-            "sources": [
-              {
-                "serviceAccountToken": {
-                  "expirationSeconds": 3607,
-                  "path": "token"
-                }
-              },
-              {
-                "configMap": {
-                  "items": [
-                    {
-                      "key": "ca.crt",
-                      "path": "ca.crt"
-                    }
-                  ],
-                  "name": "kube-root-ca.crt"
-                }
-              },
-              {
-                "downwardAPI": {
-                  "items": [
-                    {
-                      "fieldRef": {
-                        "apiVersion": "v1",
-                        "fieldPath": "metadata.namespace"
-                      },
-                      "path": "namespace"
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        }
-        """)?.AsObject() ?? throw new InvalidOperationException("Failed to build service account volume JSON.");
-    }
-
-    private static JsonObject BuildServiceAccountVolumeMount()
-    {
-        var mount = new JsonObject();
-        mount.Set("mountPath", "/var/run/secrets/kubernetes.io/serviceaccount");
-        mount.Set("name", "serviceaccount-token");
-        mount.Set("readOnly", true);
-        return mount;
-    }
-
-    private static readonly IReadOnlyDictionary<string, string> StackLabels =
-        new Dictionary<string, string>
-        {
-            ["app.kubernetes.io/name"] = DataPlaneConstants.PulumiStackLabel,
-            ["app.kubernetes.io/managed-by"] = KubernetesConstants.LabelValues.ManagedBy,
-            ["app.kubernetes.io/part-of"] = KubernetesConstants.LabelValues.PartOf
-        };
 
 }
