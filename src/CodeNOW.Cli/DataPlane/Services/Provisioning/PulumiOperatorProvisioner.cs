@@ -4,7 +4,6 @@ using CodeNOW.Cli.Common.Yaml;
 using CodeNOW.Cli.DataPlane.Models;
 using k8s.Models;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
 using System.Text.Json.Nodes;
 
 namespace CodeNOW.Cli.DataPlane.Services.Provisioning;
@@ -50,6 +49,26 @@ public interface IPulumiOperatorProvisioner
 /// </summary>
 internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
 {
+    /// <summary>
+    /// Base name for the operator controller deployment.
+    /// </summary>
+    internal const string OperatorDeploymentBaseName = "controller-manager";
+    /// <summary>
+    /// Prefix for Pulumi operator resource names.
+    /// </summary>
+    internal const string PulumiOperatorNamePrefix = "cn-pulumi-";
+    /// <summary>
+    /// Prefix for Pulumi workspace resources.
+    /// </summary>
+    internal const string PulumiWorkspaceNamePrefix = "pulumi-";
+    /// <summary>
+    /// Relative path to embedded Pulumi operator manifests on disk.
+    /// </summary>
+    internal const string PulumiOperatorManifestsRelativePath = "DataPlane/Manifests/PulumiOperator";
+    /// <summary>
+    /// Embedded resource root for Pulumi operator manifests.
+    /// </summary>
+    internal const string PulumiOperatorManifestsResourceRoot = "DataPlane/Manifests/PulumiOperator/";
     private readonly ILogger<PulumiOperatorProvisioner> logger;
     private readonly YamlToJsonConverter yamlToJsonConverter;
     private readonly string operatorImage;
@@ -61,7 +80,7 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
     public PulumiOperatorProvisioner(
         ILogger<PulumiOperatorProvisioner> logger,
         YamlToJsonConverter yamlToJsonConverter,
-        IOperatorInfoProvider operatorInfoProvider)
+        IPulumiOperatorInfoProvider operatorInfoProvider)
     {
         this.logger = logger;
         this.yamlToJsonConverter = yamlToJsonConverter;
@@ -91,55 +110,38 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
     /// <inheritdoc />
     public async Task WaitForOperatorReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout)
     {
-        var deploymentName = EnsurePrefixed(DataPlaneConstants.OperatorDeploymentBaseName);
+        var deploymentName = EnsurePrefixed(OperatorDeploymentBaseName);
         await WaitForDeploymentReadyAsync(client, namespaceName, deploymentName, timeout);
     }
 
     /// <inheritdoc />
     public string GetOperatorImage(OperatorConfig config)
     {
-        if (string.IsNullOrWhiteSpace(config.ContainerRegistry.Hostname))
-            return operatorImage;
-
-        return $"{config.ContainerRegistry.Hostname.TrimEnd('/')}/{operatorImage.TrimStart('/')}";
-    }
-
-    private IEnumerable<string> GetOperatorPath(params string[] parts)
-    {
-        var all = new List<string> { AppContext.BaseDirectory, "DataPlane", "Manifests", "Operator" };
-        all.AddRange(parts);
-        var root = Path.Combine(all.ToArray());
-
-        if (File.Exists(root))
-            return [root];
-
-        return Directory.EnumerateFiles(root, "*.yaml", SearchOption.AllDirectories);
+        return ProvisioningCommonTools.ResolveImage(config, operatorImage);
     }
 
     private async Task ApplyCrdManifestsInternalAsync(IKubernetesClient client)
     {
         logger.LogInformation("Applying CRDs...");
-
-        var files = GetOperatorPath("crd");
-
-        foreach (var file in files)
+        foreach (var (fileName, yaml) in ProvisioningCommonTools.GetYamlDocuments(
+                     PulumiOperatorManifestsResourceRoot,
+                     PulumiOperatorManifestsRelativePath,
+                     "crd"))
         {
-            logger.LogInformation("Applying CRD file: {file}", file);
-
-            var yaml = File.ReadAllText(file);
+            logger.LogInformation("Applying CRD file: {file}", fileName);
 
             foreach (var jsonObj in yamlToJsonConverter.ConvertAll(yaml))
             {
-                var name = jsonObj.GetRequiredString("metadata.name");
+                var crdName = jsonObj.GetRequiredString("metadata.name");
                 var patch = new V1Patch(jsonObj.ToJsonString(), V1Patch.PatchType.ApplyPatch);
 
                 await client.ApiextensionsV1.PatchCustomResourceDefinitionAsync(
                     patch,
-                    name,
+                    crdName,
                     fieldManager: KubernetesConstants.FieldManager,
                     force: true);
 
-                logger.LogInformation("Applied CRD {name}.", name);
+                logger.LogInformation("Applied CRD {name}.", crdName);
             }
         }
     }
@@ -147,22 +149,25 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
     private async Task ApplyRbacManifestsInternalAsync(IKubernetesClient client, string targetNamespace)
     {
         logger.LogInformation("Applying RBAC to namespace {ns}...", targetNamespace);
-
-        var files = GetOperatorPath("rbac");
-
-        foreach (var file in files)
+        foreach (var (fileName, yaml) in ProvisioningCommonTools.GetYamlDocuments(
+                     PulumiOperatorManifestsResourceRoot,
+                     PulumiOperatorManifestsRelativePath,
+                     "rbac"))
         {
-            logger.LogInformation("Applying RBAC file: {file}", file);
-            var yaml = File.ReadAllText(file);
+            logger.LogInformation("Applying RBAC file: {file}", fileName);
 
             foreach (var jsonObj in yamlToJsonConverter.ConvertAll(yaml))
             {
                 var kind = jsonObj.GetRequiredString("kind");
-                var name = EnsurePrefixed(jsonObj.GetRequiredString("metadata.name"));
-                jsonObj.Set("metadata.name", name);
+                var rbacName = EnsurePrefixed(jsonObj.GetRequiredString("metadata.name"));
+                jsonObj.Set("metadata.name", rbacName);
 
                 KubernetesManifestTools.NormalizeMetadataMaps(jsonObj);
-                SetOperatorLabels(jsonObj);
+                ProvisioningCommonTools.ApplyOperatorLabels(
+                    jsonObj,
+                    "metadata",
+                    DataPlaneConstants.PulumiOperatorAppLabelValue,
+                    operatorVersion);
 
                 if (kind is "ServiceAccount" or "Role" or "RoleBinding")
                 {
@@ -200,7 +205,7 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
                 var kubeObj = KubernetesManifestTools.DeserializeByKind(jsonObj.ToJsonString(), kind);
                 await client.ApplyAsync(kubeObj);
 
-                logger.LogInformation("Applied RBAC {kind} '{name}'.", kind, name);
+                logger.LogInformation("Applied RBAC {kind} '{name}'.", kind, rbacName);
             }
         }
     }
@@ -208,10 +213,10 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
     private async Task ApplyOperatorDeploymentInternalAsync(IKubernetesClient client, OperatorConfig config)
     {
         logger.LogInformation("Applying operator deployment to namespace {ns}...", config.Kubernetes.Namespaces.System.Name);
-
-        var file = GetOperatorPath("manager", "manager.yaml").First();
-
-        var yaml = File.ReadAllText(file);
+        var yaml = ProvisioningCommonTools.GetYamlDocument(
+            PulumiOperatorManifestsResourceRoot,
+            PulumiOperatorManifestsRelativePath,
+            "manager/manager.yaml");
 
         foreach (var jsonObj in yamlToJsonConverter.ConvertAll(yaml))
         {
@@ -224,14 +229,22 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
                 continue;
 
             KubernetesManifestTools.NormalizeMetadataMaps(jsonObj);
-            SetOperatorLabels(jsonObj);
+            ProvisioningCommonTools.ApplyOperatorLabels(
+                jsonObj,
+                "metadata",
+                DataPlaneConstants.PulumiOperatorAppLabelValue,
+                operatorVersion);
 
             if (kind is "Deployment")
             {
-                SetOperatorLabels(jsonObj, "spec.template.metadata");
-                ApplyDeploymentNamespaces(jsonObj, targetNamespace);
+                ProvisioningCommonTools.ApplyOperatorLabels(
+                    jsonObj,
+                    "spec.template.metadata",
+                    DataPlaneConstants.PulumiOperatorAppLabelValue,
+                    operatorVersion);
+                ApplyDeploymentPodSpecDefaults(jsonObj, targetNamespace, config);
                 ApplyDeploymentSecurityContext(jsonObj, config.Kubernetes.SecurityContextRunAsId);
-                ApplyServiceAccountAttachments(jsonObj);
+                ProvisioningCommonTools.ApplyServiceAccountAttachments(jsonObj);
                 jsonObj.Set("spec.template.spec.containers[0].image", GetOperatorImage(config));
             }
             else if (kind is "Service")
@@ -288,12 +301,14 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
                 resource.StartsWith("serviceaccounts", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static void ApplyDeploymentNamespaces(JsonObject jsonObj, string targetNamespace)
+    private static void ApplyDeploymentPodSpecDefaults(JsonObject jsonObj, string targetNamespace, OperatorConfig config)
     {
         jsonObj.Set("metadata.namespace", targetNamespace);
         jsonObj.Set("spec.template.metadata.namespace", targetNamespace);
         jsonObj.Set("spec.template.spec.imagePullSecrets[0].name", KubernetesConstants.SystemImagePullSecret);
         jsonObj.Set("spec.template.spec.automountServiceAccountToken", false);
+        if (jsonObj["spec"]?["template"]?["spec"] is JsonObject podSpec)
+            ProvisioningCommonTools.ApplySystemNodePlacement(podSpec, config);
         if (jsonObj.TryGetString("spec.template.spec.serviceAccountName", out var serviceAccountName))
         {
             jsonObj.Set("spec.template.spec.serviceAccountName", EnsurePrefixed(serviceAccountName));
@@ -304,124 +319,30 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
     {
         jsonObj.Set("spec.template.spec.securityContext.runAsUser", runAsId);
         jsonObj.Set("spec.template.spec.securityContext.runAsGroup", runAsId);
+        jsonObj.Set("spec.template.spec.securityContext.fsGroup", runAsId);
         jsonObj.Set("spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem", true);
         jsonObj.Set("spec.template.spec.containers[0].securityContext.seccompProfile.type", "RuntimeDefault");
     }
 
-    private static void ApplyServiceAccountAttachments(JsonObject jsonObj)
-    {
-        var serviceAccountVolume = BuildServiceAccountVolume();
-        var serviceAccountVolumeMount = BuildServiceAccountVolumeMount();
-
-        jsonObj.Set("spec.template.spec.containers[0].volumeMounts[0]", serviceAccountVolumeMount);
-        jsonObj.Set("spec.template.spec.volumes[0]", serviceAccountVolume);
-    }
-
-    private static JsonObject BuildServiceAccountVolume()
-    {
-        return JsonNode.Parse("""
-        {
-          "name": "serviceaccount-token",
-          "projected": {
-            "defaultMode": 292,
-            "sources": [
-              {
-                "serviceAccountToken": {
-                  "expirationSeconds": 3607,
-                  "path": "token"
-                }
-              },
-              {
-                "configMap": {
-                  "items": [
-                    {
-                      "key": "ca.crt",
-                      "path": "ca.crt"
-                    }
-                  ],
-                  "name": "kube-root-ca.crt"
-                }
-              },
-              {
-                "downwardAPI": {
-                  "items": [
-                    {
-                      "fieldRef": {
-                        "apiVersion": "v1",
-                        "fieldPath": "metadata.namespace"
-                      },
-                      "path": "namespace"
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        }
-        """)?.AsObject() ?? throw new InvalidOperationException("Failed to build service account volume JSON.");
-    }
-
-    private static JsonObject BuildServiceAccountVolumeMount()
-    {
-        var mount = new JsonObject();
-        mount.Set("mountPath", "/var/run/secrets/kubernetes.io/serviceaccount");
-        mount.Set("name", "serviceaccount-token");
-        mount.Set("readOnly", true);
-        return mount;
-    }
-
-    private void SetOperatorLabels(JsonObject jsonObj)
-    {
-        SetOperatorLabels(jsonObj, "metadata");
-    }
-
-    private void SetOperatorLabels(JsonObject jsonObj, string metadataPath)
-    {
-        var operatorLabels = new Dictionary<string, string>
-        {
-            ["app.kubernetes.io/name"] = KubernetesConstants.LabelValues.OperatorName,
-            ["app.kubernetes.io/instance"] = KubernetesConstants.LabelValues.OperatorName,
-            ["app.kubernetes.io/managed-by"] = KubernetesConstants.LabelValues.ManagedBy,
-            ["app.kubernetes.io/part-of"] = KubernetesConstants.LabelValues.PartOf,
-            ["app.kubernetes.io/version"] = operatorVersion
-        };
-
-        KubernetesManifestTools.ApplyLabels(jsonObj, metadataPath, operatorLabels);
-    }
-
     private static string EnsurePrefixed(string name)
     {
-        const string prefix = DataPlaneConstants.PulumiOperatorNamePrefix;
+        const string prefix = PulumiOperatorNamePrefix;
         if (name.StartsWith(prefix, StringComparison.Ordinal))
             return name;
 
-        const string pulumiPrefix = DataPlaneConstants.PulumiWorkspaceNamePrefix;
+        const string pulumiPrefix = PulumiWorkspaceNamePrefix;
         if (name.StartsWith(pulumiPrefix, StringComparison.Ordinal))
             name = name[pulumiPrefix.Length..];
 
         return prefix + name;
     }
 
-    private static async Task WaitForDeploymentReadyAsync(
+    private static Task WaitForDeploymentReadyAsync(
         IKubernetesClient client,
         string namespaceName,
         string deploymentName,
         TimeSpan timeout)
     {
-        var sw = Stopwatch.StartNew();
-        while (true)
-        {
-            var deployment = await client.AppsV1.ReadNamespacedDeploymentAsync(deploymentName, namespaceName);
-            var desired = deployment.Spec?.Replicas ?? 1;
-            var ready = deployment.Status?.ReadyReplicas ?? 0;
-
-            if (ready >= desired && desired > 0)
-                return;
-
-            if (sw.Elapsed >= timeout)
-                throw new TimeoutException($"Deployment '{deploymentName}' in namespace '{namespaceName}' not ready after {timeout}.");
-
-            await Task.Delay(TimeSpan.FromSeconds(2));
-        }
+        return ProvisioningCommonTools.WaitForDeploymentReadyAsync(client, namespaceName, deploymentName, timeout);
     }
 }

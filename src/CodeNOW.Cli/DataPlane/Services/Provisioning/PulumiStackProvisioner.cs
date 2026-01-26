@@ -41,7 +41,7 @@ public interface IPulumiStackProvisioner
     /// <param name="config">Operator configuration settings.</param>
     Task CreateDataPlaneConfigSecretAsync(IKubernetesClient client, OperatorConfig config);
     /// <summary>
-    /// Creates or updates the Pulumi state PVC when using local state.
+    /// Creates or updates the Pulumi state PVC when using local state (S3 disabled).
     /// </summary>
     /// <param name="client">Kubernetes client used to apply resources.</param>
     /// <param name="config">Operator configuration settings.</param>
@@ -49,7 +49,7 @@ public interface IPulumiStackProvisioner
 }
 
 /// <summary>
-/// Orchestrates Pulumi stack provisioning steps.
+/// Orchestrates Pulumi stack provisioning steps and RBAC setup.
 /// </summary>
 internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
 {
@@ -379,13 +379,13 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
         try
         {
             var existing = await client.CoreV1.ReadNamespacedSecretAsync(
-                DataPlaneConstants.PulumiOperatorConfigSecretName,
+                DataPlaneConstants.OperatorConfigSecretName,
                 config.Kubernetes.Namespaces.System.Name);
             secret.Metadata.ResourceVersion = existing.Metadata.ResourceVersion;
 
             await client.CoreV1.ReplaceNamespacedSecretAsync(
                 secret,
-                DataPlaneConstants.PulumiOperatorConfigSecretName,
+                DataPlaneConstants.OperatorConfigSecretName,
                 config.Kubernetes.Namespaces.System.Name);
         }
         catch (k8s.Autorest.HttpOperationException ex)

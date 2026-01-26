@@ -34,6 +34,9 @@ public sealed class OperatorConfig
 
     public PulumiConfig Pulumi { get; set; } = new();
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public FluxCDConfig? FluxCD { get; set; }
+
     public SecurityConfig Security { get; set; } = new();
 
 }
@@ -186,6 +189,11 @@ public sealed class PulumiConfig
     public PulumiImagesConfig Images { get; set; } = new();
 
     /// <summary>
+    /// Determines whether Pulumi operator CRDs should be installed.
+    /// </summary>
+    public bool InstallCrds { get; set; } = true;
+
+    /// <summary>
     /// Pulumi passphrase for secrets encryption.
     /// </summary>
     public string Passphrase { get; set; } = "";
@@ -207,6 +215,35 @@ public sealed class PulumiImagesConfig
     /// Example: 1.0.2
     /// </summary>
     public string PluginsVersion { get; set; } = "";
+}
+
+/// <summary>
+/// FluxCD configuration.
+/// </summary>
+public sealed class FluxCDConfig
+{
+    /// <summary>
+    /// Enables FluxCD source-controller provisioning.
+    /// </summary>
+    public bool Enabled { get; set; } = false;
+    /// <summary>
+    /// Determines whether FluxCD CRDs should be installed.
+    /// </summary>
+    public bool InstallCrds { get; set; } = true;
+
+    public FluxCDImagesConfig Images { get; set; } = new();
+}
+
+/// <summary>
+/// FluxCD image versions.
+/// </summary>
+public sealed class FluxCDImagesConfig
+{
+    /// <summary>
+    /// FluxCD source-controller image version (tag).
+    /// Example: v1.7.4
+    /// </summary>
+    public string SourceControllerVersion { get; set; } = "";
 }
 
 /// <summary>

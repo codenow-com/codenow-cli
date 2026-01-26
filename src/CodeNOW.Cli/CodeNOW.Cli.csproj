@@ -46,10 +46,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="../../assets/vendor/generated/dataplane/operator/**/*.*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>DataPlane/Manifests/Operator/%(RecursiveDir)%(Filename)%(Extension)</Link>
-    </Content>
+    <EmbeddedResource Include="../../assets/vendor/generated/dataplane/pulumi-operator/**/*.*">
+      <LogicalName>DataPlane/Manifests/PulumiOperator/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../assets/vendor/generated/dataplane/fluxcd/**/*.*">
+      <LogicalName>DataPlane/Manifests/FluxCD/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

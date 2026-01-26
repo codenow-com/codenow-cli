@@ -95,6 +95,9 @@ internal sealed class NamespaceProvisioner : INamespaceProvisioner
         return new NamespaceProvisioningTasks(systemNamespaceTask, cniNamespaceTask, ciPipelinesNamespaceTask);
     }
 
+    /// <summary>
+    /// Creates or updates a namespace and applies image pull secret.
+    /// </summary>
     private async Task CreateNamespaceAsync(
         IKubernetesClient client,
         string namespaceName,
@@ -105,7 +108,11 @@ internal sealed class NamespaceProvisioner : INamespaceProvisioner
     {
         _logger.LogInformation("Applying namespace {ns}...", namespaceName);
 
-        var patchJson = KubernetesManifestTools.BuildNamespacePatch(namespaceName, annotations);
+        var patchJson = KubernetesManifestTools.BuildNamespacePatch(
+            namespaceName,
+            DataPlaneConstants.NamespaceTypeSystemLabelValue,
+            DataPlaneConstants.PartOfDataPlaneLabelValue,
+            annotations);
 
         await client.CoreV1.PatchNamespaceAsync(
             new V1Patch(patchJson, V1Patch.PatchType.ApplyPatch),
@@ -126,6 +133,9 @@ internal sealed class NamespaceProvisioner : INamespaceProvisioner
         _logger.LogInformation("Namespace {ns} applied.", namespaceName);
     }
 
+    /// <summary>
+    /// Creates or replaces the image pull secret in the target namespace.
+    /// </summary>
     private async Task CreateImagePullSecretAsync(
         IKubernetesClient client,
         string namespaceName,
@@ -147,12 +157,7 @@ internal sealed class NamespaceProvisioner : INamespaceProvisioner
             Metadata = new V1ObjectMeta
             {
                 Name = secretName,
-                NamespaceProperty = namespaceName,
-                Labels = new Dictionary<string, string>
-                {
-                    ["app.kubernetes.io/managed-by"] = KubernetesConstants.LabelValues.ManagedBy,
-                    ["app.kubernetes.io/part-of"] = KubernetesConstants.LabelValues.PartOf
-                }
+                NamespaceProperty = namespaceName
             },
             Type = "kubernetes.io/dockerconfigjson",
             Data = new Dictionary<string, byte[]>
@@ -160,6 +165,7 @@ internal sealed class NamespaceProvisioner : INamespaceProvisioner
                 [".dockerconfigjson"] = Encoding.UTF8.GetBytes(dockerConfigJson)
             }
         };
+        KubernetesManifestTools.ApplyLabels(secret.Metadata, ProvisioningCommonTools.BootstrapLabels);
         try
         {
             var existing = await client.CoreV1.ReadNamespacedSecretAsync(secretName, namespaceName);

@@ -33,6 +33,15 @@ Run the command with:
 cn dp bootstrap
 ```
 
+Additional flags:
+
+- `--fluxcd-enable`: Enable installation of FluxCD components (currently installs only the [Source Controller](https://fluxcd.io/flux/components/source/)). Applies only when generating a new config.
+- `--fluxcd-skip-crds`: Skip FluxCD CRD installation when FluxCD is enabled. Applies only when generating a new config.
+- `--pulumi-skip-crds`: Skip Pulumi operator CRD installation. Applies only when generating a new config.
+
+> FluxCD is required to correctly load Git configuration from Azure DevOps Server.
+> It also enables advanced Git capabilities such as multiple branches, excluding
+> files from the source, verifying source revisions using signatures, and more.
 
 ## Configuration Sources
 
@@ -98,6 +107,10 @@ configuration.
 | Username | Git username (required for username/password auth). |
 | Password | Git password (required for username/password auth). |
 | Access token | Git access token (required for token-based auth). |
+
+> When FluxCD is enabled, authentication values must be provided according to the
+> FluxCD Source Controller documentation for GitRepository secrets (see the
+> [secret reference](https://fluxcd.io/flux/components/source/gitrepositories/#secret-reference)).
 
 ### Kubernetes
 

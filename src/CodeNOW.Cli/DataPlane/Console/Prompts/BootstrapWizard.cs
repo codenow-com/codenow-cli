@@ -3,6 +3,7 @@ using CodeNOW.Cli.Common.Console.Commands;
 using CodeNOW.Cli.Common.Console.Prompts;
 using CodeNOW.Cli.DataPlane.Console.Supports;
 using CodeNOW.Cli.DataPlane.Models;
+using CodeNOW.Cli.DataPlane.Services.Provisioning;
 using Spectre.Console;
 using TextCopy;
 
@@ -16,17 +17,33 @@ internal sealed class BootstrapWizard
     /// <summary>
     /// Runs the configuration wizard and persists the result to disk.
     /// </summary>
+    /// <param name="existingConfig">Existing configuration to edit.</param>
+    /// <param name="defaultOutputPath">Default output path for the generated config.</param>
+    /// <param name="encryptionKey">Optional existing encryption key to reuse.</param>
+    /// <param name="defaultConfigFile">Default config file name.</param>
+    /// <param name="configStore">Persistence helper for configuration data.</param>
+    /// <param name="operatorInfoProvider">Pulumi operator metadata provider.</param>
+    /// <param name="fluxcdInfoProvider">FluxCD metadata provider.</param>
+    /// <param name="fluxcdEnable">Enable installation of FluxCD components.</param>
+    /// <param name="fluxcdSkipCrds">Skip FluxCD CRD installation when FluxCD is enabled.</param>
+    /// <param name="pulumiSkipCrds">Skip Pulumi operator CRD installation.</param>
     public (Result Result, OperatorConfig? Config) Run(
         OperatorConfig? existingConfig,
         string? defaultOutputPath,
         string? encryptionKey,
         string defaultConfigFile,
         BootstrapConfigStore configStore,
-        PulumiOperatorInfoProvider operatorInfoProvider)
+        IPulumiOperatorInfoProvider operatorInfoProvider,
+        IFluxCDInfoProvider fluxcdInfoProvider,
+        bool fluxcdEnable,
+        bool fluxcdSkipCrds,
+        bool pulumiSkipCrds)
     {
         var opConfig = existingConfig ?? new OperatorConfig();
         var usePrefill = existingConfig is not null;
         var promptFactory = new PromptFactory(usePrefill);
+        var operatorInfo = operatorInfoProvider.GetInfo();
+        var fluxcdInfo = fluxcdInfoProvider.GetInfo();
 
         PromptEnvironment(promptFactory, opConfig, usePrefill);
         PromptNpmRegistry(promptFactory, opConfig, usePrefill);
@@ -48,13 +65,25 @@ internal sealed class BootstrapWizard
         }
 
         if (existingConfig is null || string.IsNullOrWhiteSpace(opConfig.Pulumi.Images.RuntimeVersion))
-            opConfig.Pulumi.Images.RuntimeVersion = operatorInfoProvider.LoadRuntimeImageVersion();
+            opConfig.Pulumi.Images.RuntimeVersion = operatorInfo.RuntimeVersion;
         if (existingConfig is null || string.IsNullOrWhiteSpace(opConfig.Pulumi.Images.PluginsVersion))
-            opConfig.Pulumi.Images.PluginsVersion = operatorInfoProvider.LoadPluginsImageVersion();
+            opConfig.Pulumi.Images.PluginsVersion = operatorInfo.PluginsVersion;
         if (existingConfig is null || string.IsNullOrWhiteSpace(opConfig.Pulumi.Passphrase))
             opConfig.Pulumi.Passphrase = configStore.GeneratePulumiPassphrase();
 
         opConfig.Schema = DataPlaneConstants.OperatorConfigSchemaV1Url;
+
+        if (existingConfig is null)
+        {
+            BootstrapConfigOverrides.ApplyFluxcdFlags(opConfig, fluxcdEnable, fluxcdSkipCrds);
+            BootstrapConfigOverrides.ApplyPulumiFlags(opConfig, pulumiSkipCrds);
+        }
+
+        if (opConfig.FluxCD is not null &&
+            (existingConfig is null || string.IsNullOrWhiteSpace(opConfig.FluxCD.Images.SourceControllerVersion)))
+        {
+            opConfig.FluxCD.Images.SourceControllerVersion = fluxcdInfo.SourceControllerVersion;
+        }
 
         configStore.SaveConfig(outputPath, opConfig, encryptionKey);
 
