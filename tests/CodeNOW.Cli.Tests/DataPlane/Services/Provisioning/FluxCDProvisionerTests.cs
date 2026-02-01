@@ -1,8 +1,6 @@
-using System;
 using System.Text;
-using System.Collections.Generic;
-using System.Linq;
 using CodeNOW.Cli.Common.Yaml;
+using CodeNOW.Cli.DataPlane;
 using CodeNOW.Cli.DataPlane.Models;
 using CodeNOW.Cli.DataPlane.Services.Provisioning;
 using CodeNOW.Cli.Tests.TestDoubles.Kubernetes;
@@ -123,6 +121,24 @@ public class FluxCDProvisionerTests
         Assert.Contains(env, e => e.Name == "HTTP_PROXY" && e.Value == "proxy.example.com:3128");
         Assert.Contains(env, e => e.Name == "HTTPS_PROXY" && e.Value == "proxy.example.com:3128");
         Assert.Contains(env, e => e.Name == "NO_PROXY" && e.Value == ".cluster.local");
+
+        var mount = container.VolumeMounts?.Single(volumeMount =>
+            string.Equals(volumeMount.Name, "ca-certificates", StringComparison.Ordinal));
+        Assert.NotNull(mount);
+        Assert.Equal(
+            $"/etc/ssl/certs/{DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert}",
+            mount?.MountPath);
+        Assert.Equal(DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert, mount?.SubPath);
+        Assert.True(mount?.ReadOnlyProperty);
+
+        var volume = deployment.Spec?.Template?.Spec?.Volumes?.Single(volumeEntry =>
+            string.Equals(volumeEntry.Name, "ca-certificates", StringComparison.Ordinal));
+        Assert.NotNull(volume?.Secret);
+        Assert.Equal(DataPlaneConstants.OperatorConfigSecretName, volume?.Secret?.SecretName);
+        Assert.NotNull(volume?.Secret?.Items);
+        Assert.Single(volume!.Secret!.Items);
+        Assert.Equal(DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert, volume?.Secret?.Items?.First().Key);
+        Assert.Equal(DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert, volume?.Secret?.Items?.First().Path);
 
         var toleration = deployment.Spec?.Template?.Spec?.Tolerations?.FirstOrDefault();
         Assert.NotNull(toleration);
