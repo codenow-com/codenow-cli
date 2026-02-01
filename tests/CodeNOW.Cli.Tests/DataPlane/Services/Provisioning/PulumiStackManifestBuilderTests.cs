@@ -171,6 +171,30 @@ public class PulumiStackManifestBuilderTests
     }
 
     [Fact]
+    public void BuildStack_ConfiguresPulumiContainerCustomCaEnv()
+    {
+        var builder = BuildBuilder();
+        var config = new OperatorConfig
+        {
+            Kubernetes = { Namespaces = { System = { Name = "system" } } },
+            Security = { CustomCaBase64 = Convert.ToBase64String("CA"u8.ToArray()) }
+        };
+
+        var stack = builder.BuildStack(config, "sa");
+        var podSpec = stack["spec"]!
+            .AsObject()["workspaceTemplate"]!.AsObject()["spec"]!.AsObject()["podTemplate"]!.AsObject()
+            ["spec"]!.AsObject();
+        var containers = podSpec["containers"]!.AsArray();
+        var pulumi = containers.First(node => node?["name"]?.GetValue<string>() == "pulumi")!.AsObject();
+        var env = pulumi["env"]!.AsArray();
+
+        Assert.Contains(env, node =>
+            node?["name"]?.GetValue<string>() == "NODE_EXTRA_CA_CERTS" &&
+            node?["value"]?.GetValue<string>() ==
+            $"/etc/ssl/certs/{DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert}");
+    }
+
+    [Fact]
     public void BuildStack_ConfiguresInstallPluginsContainer()
     {
         var builder = BuildBuilder();
