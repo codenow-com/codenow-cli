@@ -93,6 +93,58 @@ public class PulumiOperatorProvisionerTests
     }
 
     [Fact]
+    public async Task ApplyOperatorDeploymentAsync_AddsCustomCaVolumeAndMount()
+    {
+        WriteManifests(
+            rbacYaml: "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: controller-manager\n",
+            crdYaml: "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: stacks.pulumi.com\n",
+            managerYaml:
+                """
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: controller-manager
+                spec:
+                  template:
+                    spec:
+                      serviceAccountName: controller-manager
+                      containers:
+                        - name: manager
+                          image: old
+                """);
+
+        var provisioner = BuildProvisioner();
+        var client = new FakeKubernetesClient();
+        var config = new OperatorConfig
+        {
+            Kubernetes = { Namespaces = { System = { Name = "system" } } },
+            Security = { CustomCaBase64 = "ZHVtbXk=" }
+        };
+
+        await provisioner.ApplyOperatorDeploymentAsync(client, config);
+
+        var deployment = client.AppliedObjects.OfType<V1Deployment>().Single();
+        var container = deployment.Spec?.Template?.Spec?.Containers?.First();
+        var mount = container?.VolumeMounts?.Single(volumeMount =>
+            string.Equals(volumeMount.Name, "ca-certificates", StringComparison.Ordinal));
+        Assert.NotNull(mount);
+        Assert.Equal(
+            $"/etc/ssl/certs/{DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert}",
+            mount?.MountPath);
+        Assert.Equal(DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert, mount?.SubPath);
+        Assert.True(mount?.ReadOnlyProperty);
+
+        var volume = deployment.Spec?.Template?.Spec?.Volumes?.Single(volumeEntry =>
+            string.Equals(volumeEntry.Name, "ca-certificates", StringComparison.Ordinal));
+        Assert.NotNull(volume?.Secret);
+        Assert.Equal(DataPlaneConstants.OperatorConfigSecretName, volume?.Secret?.SecretName);
+        Assert.NotNull(volume?.Secret?.Items);
+        Assert.Single(volume!.Secret!.Items);
+        Assert.Equal(DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert, volume?.Secret?.Items?.First().Key);
+        Assert.Equal(DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert, volume?.Secret?.Items?.First().Path);
+    }
+
+    [Fact]
     public async Task ApplyCrdManifestsAsync_PatchesCustomResourceDefinitions()
     {
         WriteManifests(

@@ -313,6 +313,39 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
         {
             jsonObj.Set("spec.template.spec.serviceAccountName", EnsurePrefixed(serviceAccountName));
         }
+        if (!string.IsNullOrWhiteSpace(config.Security.CustomCaBase64))
+        {
+            var podSpecObj = JsonManifestEditor.EnsureObjectPath(jsonObj, "spec.template.spec");
+            var containers = JsonManifestEditor.EnsureArray(podSpecObj, "containers");
+            JsonObject container;
+            if (containers.Count == 0 || containers[0] is not JsonObject existingContainer)
+            {
+                container = new JsonObject();
+                if (containers.Count == 0)
+                    containers.Add((JsonNode)container);
+                else
+                    containers[0] = container;
+            }
+            else
+            {
+                container = existingContainer;
+            }
+
+            var volumeMounts = JsonManifestEditor.EnsureArray(container, "volumeMounts");
+            ProvisioningCommonTools.EnsureVolumeMount(
+                volumeMounts,
+                "ca-certificates",
+                $"/etc/ssl/certs/{DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert}",
+                DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert,
+                true);
+
+            var volumes = JsonManifestEditor.EnsureArray(podSpecObj, "volumes");
+            ProvisioningCommonTools.EnsureSecretVolumeWithItem(
+                volumes,
+                "ca-certificates",
+                DataPlaneConstants.OperatorConfigSecretName,
+                DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert);
+        }
     }
 
     private static void ApplyDeploymentSecurityContext(JsonObject jsonObj, int runAsId)

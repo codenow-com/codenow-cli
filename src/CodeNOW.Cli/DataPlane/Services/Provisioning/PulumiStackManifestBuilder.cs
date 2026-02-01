@@ -470,12 +470,12 @@ internal sealed class PulumiStackManifestBuilder
         };
 
         var volumeMounts = JsonManifestEditor.EnsureArray(pulumiContainer, "volumeMounts");
-        EnsureVolumeMount(volumeMounts, "tmp", "/tmp", null, false);
-        EnsureVolumeMount(volumeMounts, "npmrc", $"{PulumiHomePath}/.npmrc", ".npmrc", true);
-        EnsureVolumeMount(volumeMounts, "pulumi", PulumiHomePath, null, false);
+        ProvisioningCommonTools.EnsureVolumeMount(volumeMounts, "tmp", "/tmp", null, false);
+        ProvisioningCommonTools.EnsureVolumeMount(volumeMounts, "npmrc", $"{PulumiHomePath}/.npmrc", ".npmrc", true);
+        ProvisioningCommonTools.EnsureVolumeMount(volumeMounts, "pulumi", PulumiHomePath, null, false);
         if (!config.S3.Enabled)
-            EnsureVolumeMount(volumeMounts, "pulumi-state", PulumiStatePath, null, false);
-        EnsureVolumeMount(
+            ProvisioningCommonTools.EnsureVolumeMount(volumeMounts, "pulumi-state", PulumiStatePath, null, false);
+        ProvisioningCommonTools.EnsureVolumeMount(
             volumeMounts,
             "docker-auth",
             $"{PulumiHomePath}/.docker/config.json",
@@ -483,7 +483,7 @@ internal sealed class PulumiStackManifestBuilder
             true);
         if (!string.IsNullOrWhiteSpace(config.Security.CustomCaBase64))
         {
-            EnsureVolumeMount(
+            ProvisioningCommonTools.EnsureVolumeMount(
                 volumeMounts,
                 "ca-certificates",
                 $"/etc/ssl/certs/{DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert}",
@@ -492,15 +492,15 @@ internal sealed class PulumiStackManifestBuilder
         }
         ProvisioningCommonTools.EnsureProxyEnv(pulumiContainer, config);
         var volumes = JsonManifestEditor.EnsureArray(podSpec, "volumes");
-        EnsureSecretVolume(volumes, "npmrc", DataPlaneConstants.OperatorConfigSecretName);
+        ProvisioningCommonTools.EnsureSecretVolume(volumes, "npmrc", DataPlaneConstants.OperatorConfigSecretName);
         EnsureEmptyDirVolume(volumes, "pulumi");
         EnsureEmptyDirVolume(volumes, "tmp");
         if (!config.S3.Enabled)
             EnsurePersistentVolumeClaimVolume(volumes, "pulumi-state", DataPlaneConstants.PulumiStatePvcName);
-        EnsureSecretVolume(volumes, "docker-auth", DataPlaneConstants.OperatorConfigSecretName);
+        ProvisioningCommonTools.EnsureSecretVolume(volumes, "docker-auth", DataPlaneConstants.OperatorConfigSecretName);
         if (!string.IsNullOrWhiteSpace(config.Security.CustomCaBase64))
         {
-            EnsureSecretVolumeWithItem(
+            ProvisioningCommonTools.EnsureSecretVolumeWithItem(
                 volumes,
                 "ca-certificates",
                 DataPlaneConstants.OperatorConfigSecretName,
@@ -529,10 +529,10 @@ internal sealed class PulumiStackManifestBuilder
             return;
 
         var volumeMounts = JsonManifestEditor.EnsureArray(container, "volumeMounts");
-        EnsureVolumeMount(volumeMounts, "tmp", "/tmp", null, false);
+        ProvisioningCommonTools.EnsureVolumeMount(volumeMounts, "tmp", "/tmp", null, false);
         if (!string.IsNullOrWhiteSpace(config.Security.CustomCaBase64))
-        {  
-            EnsureVolumeMount(
+        {
+            ProvisioningCommonTools.EnsureVolumeMount(
                 volumeMounts,
                 "ca-certificates",
                 $"/etc/ssl/certs/{DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert}",
@@ -618,78 +618,6 @@ internal sealed class PulumiStackManifestBuilder
                 ["cpu"] = "500m"
             }
         };
-    }
-
-    /// <summary>
-    /// Ensures a volume mount exists on the container.
-    /// </summary>
-    private static void EnsureVolumeMount(
-        JsonArray volumeMounts,
-        string name,
-        string mountPath,
-        string? subPath,
-        bool readOnly)
-    {
-        if (JsonManifestEditor.HasNamedObject(volumeMounts, name))
-            return;
-
-        var mount = new JsonObject
-        {
-            ["name"] = name,
-            ["mountPath"] = mountPath
-        };
-        if (!string.IsNullOrWhiteSpace(subPath))
-            mount["subPath"] = subPath;
-        if (readOnly)
-            mount["readOnly"] = true;
-
-        volumeMounts.Add((JsonNode)mount);
-    }
-
-    /// <summary>
-    /// Ensures a secret volume exists.
-    /// </summary>
-    private static void EnsureSecretVolume(JsonArray volumes, string name, string secretName)
-    {
-        if (JsonManifestEditor.HasNamedObject(volumes, name))
-            return;
-
-        volumes.Add((JsonNode)new JsonObject
-        {
-            ["name"] = name,
-            ["secret"] = new JsonObject
-            {
-                ["secretName"] = secretName
-            }
-        });
-    }
-
-    /// <summary>
-    /// Ensures a secret volume exists with a single item mapping.
-    /// </summary>
-    private static void EnsureSecretVolumeWithItem(
-        JsonArray volumes,
-        string name,
-        string secretName,
-        string key)
-    {
-        if (JsonManifestEditor.HasNamedObject(volumes, name))
-            return;
-
-        volumes.Add((JsonNode)new JsonObject
-        {
-            ["name"] = name,
-            ["secret"] = new JsonObject
-            {
-                ["secretName"] = secretName,
-                ["items"] = BuildJsonArray(
-                    new JsonObject
-                    {
-                        ["key"] = key,
-                        ["path"] = key
-                    })
-            }
-        });
     }
 
     /// <summary>

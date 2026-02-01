@@ -165,4 +165,53 @@ public class ProvisioningCommonToolsTests
         Assert.Equal("tmp", volumes[1]!["name"]?.GetValue<string>());
         Assert.Equal("serviceaccount-token", volumes[2]!["name"]?.GetValue<string>());
     }
+
+    [Fact]
+    public void EnsureVolumeMount_AddsReadOnlyMountWithSubPathOnce()
+    {
+        var volumeMounts = new JsonArray();
+
+        ProvisioningCommonTools.EnsureVolumeMount(volumeMounts, "certs", "/etc/ssl/certs/ca.crt", "ca.crt", true);
+        ProvisioningCommonTools.EnsureVolumeMount(volumeMounts, "certs", "/etc/ssl/certs/ca.crt", "ca.crt", true);
+
+        Assert.Single(volumeMounts);
+        var mount = volumeMounts[0]!.AsObject();
+        Assert.Equal("certs", mount["name"]?.GetValue<string>());
+        Assert.Equal("/etc/ssl/certs/ca.crt", mount["mountPath"]?.GetValue<string>());
+        Assert.Equal("ca.crt", mount["subPath"]?.GetValue<string>());
+        Assert.True(mount["readOnly"]?.GetValue<bool>());
+    }
+
+    [Fact]
+    public void EnsureSecretVolume_AddsSecretOnce()
+    {
+        var volumes = new JsonArray();
+
+        ProvisioningCommonTools.EnsureSecretVolume(volumes, "docker-auth", "operator-config");
+        ProvisioningCommonTools.EnsureSecretVolume(volumes, "docker-auth", "operator-config");
+
+        Assert.Single(volumes);
+        var volume = volumes[0]!.AsObject();
+        Assert.Equal("docker-auth", volume["name"]?.GetValue<string>());
+        Assert.Equal("operator-config", volume["secret"]?["secretName"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public void EnsureSecretVolumeWithItem_AddsSingleItemOnce()
+    {
+        var volumes = new JsonArray();
+
+        ProvisioningCommonTools.EnsureSecretVolumeWithItem(volumes, "ca-certificates", "operator-config", "ca.crt");
+        ProvisioningCommonTools.EnsureSecretVolumeWithItem(volumes, "ca-certificates", "operator-config", "ca.crt");
+
+        Assert.Single(volumes);
+        var volume = volumes[0]!.AsObject();
+        Assert.Equal("ca-certificates", volume["name"]?.GetValue<string>());
+        var secret = volume["secret"]!.AsObject();
+        Assert.Equal("operator-config", secret["secretName"]?.GetValue<string>());
+        var items = secret["items"]!.AsArray();
+        Assert.Single(items);
+        Assert.Equal("ca.crt", items[0]!["key"]?.GetValue<string>());
+        Assert.Equal("ca.crt", items[0]!["path"]?.GetValue<string>());
+    }
 }

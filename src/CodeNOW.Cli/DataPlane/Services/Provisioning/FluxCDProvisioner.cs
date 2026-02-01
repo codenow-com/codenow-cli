@@ -167,7 +167,27 @@ internal sealed class FluxCDProvisioner : IFluxCDProvisioner
                     jsonObj.Set("spec.template.spec.imagePullSecrets[0].name", KubernetesConstants.SystemImagePullSecret);
                     jsonObj.Set("spec.template.spec.automountServiceAccountToken", false);
                     if (jsonObj["spec"]?["template"]?["spec"] is JsonObject podSpec)
+                    {
                         ProvisioningCommonTools.ApplySystemNodePlacement(podSpec, config);
+                        if (!string.IsNullOrWhiteSpace(config.Security.CustomCaBase64))
+                        {
+                            var container = EnsureFirstContainer(jsonObj);
+                            var volumeMounts = JsonManifestEditor.EnsureArray(container, "volumeMounts");
+                            ProvisioningCommonTools.EnsureVolumeMount(
+                                volumeMounts,
+                                "ca-certificates",
+                                $"/etc/ssl/certs/{DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert}",
+                                DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert,
+                                true);
+
+                            var volumes = JsonManifestEditor.EnsureArray(podSpec, "volumes");
+                            ProvisioningCommonTools.EnsureSecretVolumeWithItem(
+                                volumes,
+                                "ca-certificates",
+                                DataPlaneConstants.OperatorConfigSecretName,
+                                DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert);
+                        }
+                    }
                     ProvisioningCommonTools.ApplyServiceAccountAttachments(jsonObj);
                     UpdateContainerArg(
                         jsonObj,

@@ -40,6 +40,92 @@ internal static class ProvisioningCommonTools
             JsonManifestEditor.EnsureEnvVar(env, "NO_PROXY", config.HttpProxy.NoProxy);
     }
 
+    /// <summary>
+    /// Ensures a volume mount exists on the container.
+    /// </summary>
+    /// <param name="volumeMounts">Target volumeMounts array to mutate.</param>
+    /// <param name="name">Kubernetes volume name.</param>
+    /// <param name="mountPath">Container mount path.</param>
+    /// <param name="subPath">Optional subPath for single-file mounts.</param>
+    /// <param name="readOnly">Whether the mount should be read-only.</param>
+    public static void EnsureVolumeMount(
+        JsonArray volumeMounts,
+        string name,
+        string mountPath,
+        string? subPath,
+        bool readOnly)
+    {
+        if (JsonManifestEditor.HasNamedObject(volumeMounts, name))
+            return;
+
+        var mount = new JsonObject
+        {
+            ["name"] = name,
+            ["mountPath"] = mountPath
+        };
+        if (!string.IsNullOrWhiteSpace(subPath))
+            mount["subPath"] = subPath;
+        if (readOnly)
+            mount["readOnly"] = true;
+
+        volumeMounts.Add((JsonNode)mount);
+    }
+
+    /// <summary>
+    /// Ensures a secret volume exists.
+    /// </summary>
+    /// <param name="volumes">Target volumes array to mutate.</param>
+    /// <param name="name">Kubernetes volume name.</param>
+    /// <param name="secretName">Secret name backing the volume.</param>
+    public static void EnsureSecretVolume(JsonArray volumes, string name, string secretName)
+    {
+        if (JsonManifestEditor.HasNamedObject(volumes, name))
+            return;
+
+        volumes.Add((JsonNode)new JsonObject
+        {
+            ["name"] = name,
+            ["secret"] = new JsonObject
+            {
+                ["secretName"] = secretName
+            }
+        });
+    }
+
+    /// <summary>
+    /// Ensures a secret volume exists with a single item mapping.
+    /// </summary>
+    /// <param name="volumes">Target volumes array to mutate.</param>
+    /// <param name="name">Kubernetes volume name.</param>
+    /// <param name="secretName">Secret name backing the volume.</param>
+    /// <param name="key">Secret key to project as a file.</param>
+    public static void EnsureSecretVolumeWithItem(
+        JsonArray volumes,
+        string name,
+        string secretName,
+        string key)
+    {
+        if (JsonManifestEditor.HasNamedObject(volumes, name))
+            return;
+
+        var items = new JsonArray();
+        items.Add((JsonNode)new JsonObject
+        {
+            ["key"] = key,
+            ["path"] = key
+        });
+
+        volumes.Add((JsonNode)new JsonObject
+        {
+            ["name"] = name,
+            ["secret"] = new JsonObject
+            {
+                ["secretName"] = secretName,
+                ["items"] = items
+            }
+        });
+    }
+
 
     /// <summary>
     /// Reads embedded resource text or returns null when not present.
