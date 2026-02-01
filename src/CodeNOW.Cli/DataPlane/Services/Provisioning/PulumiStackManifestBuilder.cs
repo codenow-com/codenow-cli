@@ -489,6 +489,11 @@ internal sealed class PulumiStackManifestBuilder
                 $"/etc/ssl/certs/{DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert}",
                 DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert,
                 true);
+            var env = JsonManifestEditor.EnsureArray(pulumiContainer, "env");
+            JsonManifestEditor.EnsureEnvVar(
+                env,
+                "NODE_EXTRA_CA_CERTS",
+                $"/etc/ssl/certs/{DataPlaneConstants.DataPlaneConfigKeyPkiCustomCaCert}");
         }
         ProvisioningCommonTools.EnsureProxyEnv(pulumiContainer, config);
         var volumes = JsonManifestEditor.EnsureArray(podSpec, "volumes");
