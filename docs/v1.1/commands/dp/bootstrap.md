@@ -102,7 +102,7 @@ configuration.
 
 | Field | Description |
 | --- | --- |
-| Configuration repository URL | Git URL containing the Data Plane configuration repository. |
+| Configuration repository URL | Git URL containing the Data Plane configuration repository. The repository must include a folder that matches the specified environment name. |
 | Authentication method | Select whether to use username/password or an access token for Git access. |
 | Username | Git username (required for username/password auth). |
 | Password | Git password (required for username/password auth). |
@@ -149,7 +149,8 @@ nodes. Choose one of the following strategies:
   to enforce node selection based on labels.
 - **Node selector + taints**: Combines node selectors with
   [taints and tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
-  for stricter isolation between system and application workloads.
+  for stricter isolation between system and application workloads. The taint
+  must use the `NoExecute` effect.
 
 > Note: Pod node selector is not supported on all managed Kubernetes offerings.
 > Verify that it is a valid option for your cloud provider. For example, it is
