@@ -105,22 +105,6 @@ public class PulumiStackManifestBuilderTests
     }
 
     [Fact]
-    public void BuildDataPlaneConfigSecret_AppliesBootstrapLabels()
-    {
-        var builder = BuildBuilder();
-        var config = new OperatorConfig
-        {
-            Kubernetes = { Namespaces = { System = { Name = "system" } } }
-        };
-
-        var secret = builder.BuildDataPlaneConfigSecret(config);
-
-        Assert.NotNull(secret.Metadata?.Labels);
-        foreach (var label in ProvisioningCommonTools.BootstrapLabels)
-            Assert.Equal(label.Value, secret.Metadata!.Labels![label.Key]);
-    }
-
-    [Fact]
     public void BuildPulumiStatePvc_AppliesBootstrapLabelsAndNamespace()
     {
         var builder = BuildBuilder();
@@ -217,9 +201,8 @@ public class PulumiStackManifestBuilderTests
     private static PulumiStackManifestBuilder BuildBuilder()
     {
         var operatorProvisioner = new FakePulumiOperatorProvisioner();
-        var configSecretBuilder = new DataPlaneConfigSecretBuilder();
         var operatorInfoProvider = new FakeOperatorInfoProvider();
-        return new PulumiStackManifestBuilder(operatorProvisioner, configSecretBuilder, operatorInfoProvider);
+        return new PulumiStackManifestBuilder(operatorProvisioner, operatorInfoProvider);
     }
 
     private sealed class FakePulumiOperatorProvisioner : IPulumiOperatorProvisioner
@@ -228,6 +211,7 @@ public class PulumiStackManifestBuilderTests
         public Task ApplyRbacManifestsAsync(IKubernetesClient client, string targetNamespace) => Task.CompletedTask;
         public Task ApplyOperatorDeploymentAsync(IKubernetesClient client, OperatorConfig config) => Task.CompletedTask;
         public Task WaitForOperatorReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout) => Task.CompletedTask;
+        public Task CreateDataPlaneConfigSecretAsync(IKubernetesClient client, OperatorConfig config) => Task.CompletedTask;
         public string GetOperatorImage(OperatorConfig config) => "operator-image";
     }
 

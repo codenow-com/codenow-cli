@@ -4,6 +4,7 @@ using CodeNOW.Cli.Common.Yaml;
 using CodeNOW.Cli.DataPlane.Models;
 using k8s.Models;
 using Microsoft.Extensions.Logging;
+using System.Net;
 using System.Text.Json.Nodes;
 
 namespace CodeNOW.Cli.DataPlane.Services.Provisioning;
@@ -38,6 +39,12 @@ public interface IPulumiOperatorProvisioner
     /// <param name="timeout">Maximum wait time before failing.</param>
     Task WaitForOperatorReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout);
     /// <summary>
+    /// Creates or updates the operator configuration secret.
+    /// </summary>
+    /// <param name="client">Kubernetes client used to apply resources.</param>
+    /// <param name="config">Operator configuration settings.</param>
+    Task CreateDataPlaneConfigSecretAsync(IKubernetesClient client, OperatorConfig config);
+    /// <summary>
     /// Returns the operator image reference resolved against the registry configuration.
     /// </summary>
     /// <param name="config">Operator configuration settings.</param>
@@ -71,6 +78,7 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
     internal const string PulumiOperatorManifestsResourceRoot = "DataPlane/Manifests/PulumiOperator/";
     private readonly ILogger<PulumiOperatorProvisioner> logger;
     private readonly YamlToJsonConverter yamlToJsonConverter;
+    private readonly DataPlaneConfigSecretBuilder configSecretBuilder;
     private readonly string operatorImage;
     private readonly string operatorVersion;
 
@@ -80,10 +88,12 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
     public PulumiOperatorProvisioner(
         ILogger<PulumiOperatorProvisioner> logger,
         YamlToJsonConverter yamlToJsonConverter,
+        DataPlaneConfigSecretBuilder configSecretBuilder,
         IPulumiOperatorInfoProvider operatorInfoProvider)
     {
         this.logger = logger;
         this.yamlToJsonConverter = yamlToJsonConverter;
+        this.configSecretBuilder = configSecretBuilder;
         var info = operatorInfoProvider.GetInfo();
         operatorImage = info.OperatorImage;
         operatorVersion = info.OperatorVersion;
@@ -112,6 +122,35 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
     {
         var deploymentName = EnsurePrefixed(OperatorDeploymentBaseName);
         await WaitForDeploymentReadyAsync(client, namespaceName, deploymentName, timeout);
+    }
+
+    /// <inheritdoc />
+    public async Task CreateDataPlaneConfigSecretAsync(
+        IKubernetesClient client,
+        OperatorConfig config)
+    {
+        var secret = configSecretBuilder.Build(config);
+        KubernetesManifestTools.ApplyLabels(secret.Metadata, ProvisioningCommonTools.BootstrapLabels);
+
+        try
+        {
+            var existing = await client.CoreV1.ReadNamespacedSecretAsync(
+                DataPlaneConstants.OperatorConfigSecretName,
+                config.Kubernetes.Namespaces.System.Name);
+            secret.Metadata.ResourceVersion = existing.Metadata.ResourceVersion;
+
+            await client.CoreV1.ReplaceNamespacedSecretAsync(
+                secret,
+                DataPlaneConstants.OperatorConfigSecretName,
+                config.Kubernetes.Namespaces.System.Name);
+        }
+        catch (k8s.Autorest.HttpOperationException ex)
+            when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+        {
+            await client.CoreV1.CreateNamespacedSecretAsync(
+                secret,
+                config.Kubernetes.Namespaces.System.Name);
+        }
     }
 
     /// <inheritdoc />

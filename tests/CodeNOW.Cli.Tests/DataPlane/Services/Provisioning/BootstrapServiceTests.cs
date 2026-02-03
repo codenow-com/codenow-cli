@@ -158,6 +158,57 @@ public class BootstrapServiceTests
         Assert.Equal(1, factory.CreateCalls);
     }
 
+    [Fact]
+    public async Task BootstrapAsync_CallsProvisionersInExactOrder()
+    {
+        var calls = new List<string>();
+        var config = new OperatorConfig();
+        config.Pulumi.InstallCrds = true;
+        config.FluxCD = new FluxCDConfig
+        {
+            Enabled = true,
+            InstallCrds = true
+        };
+        config.Kubernetes.Namespaces.System.Name = "system";
+        config.Kubernetes.Namespaces.Cni.Name = "cni";
+        config.Kubernetes.Namespaces.CiPipelines.Name = "ci";
+
+        var factory = new FakeKubernetesClientFactory();
+        var namespaces = new OrderedNamespaceProvisioner(calls);
+        var fluxcdProvisioner = new OrderedFluxCDProvisioner(calls);
+        var operatorProvisioner = new OrderedPulumiOperatorProvisioner(calls);
+        var stackProvisioner = new OrderedPulumiStackProvisioner(calls);
+
+        var service = new BootstrapService(
+            new NullLogger<BootstrapService>(),
+            factory,
+            new KubernetesConnectionOptions(),
+            namespaces,
+            fluxcdProvisioner,
+            operatorProvisioner,
+            stackProvisioner);
+
+        await service.BootstrapAsync(config);
+
+        Assert.Equal(
+            new[]
+            {
+                "namespace.StartNamespaceProvisioning",
+                "operator.ApplyCrdManifestsAsync",
+                "fluxcd.ApplyCrdManifestsAsync",
+                "operator.CreateDataPlaneConfigSecretAsync",
+                "fluxcd.ApplySourceControllerAsync",
+                "fluxcd.WaitForSourceControllerReadyAsync",
+                "operator.ApplyRbacManifestsAsync",
+                "operator.ApplyOperatorDeploymentAsync",
+                "operator.WaitForOperatorReadyAsync",
+                "stack.ApplyPulumiStackRbacAsync",
+                "stack.CreatePulumiStatePvcAsync",
+                "stack.ApplyPulumiStackAsync"
+            },
+            calls);
+    }
+
     private sealed class FakeKubernetesClientFactory : IKubernetesClientFactory
     {
         public int CreateCalls { get; private set; }
@@ -186,6 +237,7 @@ public class BootstrapServiceTests
         public bool AppliedRbac { get; private set; }
         public bool AppliedDeployment { get; private set; }
         public bool WaitedForReady { get; private set; }
+        public bool CreatedConfigSecret { get; private set; }
 
         public Task ApplyCrdManifestsAsync(IKubernetesClient client)
         {
@@ -208,6 +260,12 @@ public class BootstrapServiceTests
         public Task WaitForOperatorReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout)
         {
             WaitedForReady = true;
+            return Task.CompletedTask;
+        }
+
+        public Task CreateDataPlaneConfigSecretAsync(IKubernetesClient client, OperatorConfig config)
+        {
+            CreatedConfigSecret = true;
             return Task.CompletedTask;
         }
 
@@ -272,9 +330,6 @@ public class BootstrapServiceTests
             return Task.CompletedTask;
         }
 
-        public Task CreateDataPlaneConfigSecretAsync(IKubernetesClient client, OperatorConfig config)
-            => Task.CompletedTask;
-
         public Task CreatePulumiStatePvcAsync(IKubernetesClient client, OperatorConfig config)
             => Task.CompletedTask;
     }
@@ -307,6 +362,128 @@ public class BootstrapServiceTests
         public Task WaitForOperatorReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout)
             => Task.CompletedTask;
 
+        public Task CreateDataPlaneConfigSecretAsync(IKubernetesClient client, OperatorConfig config)
+            => Task.CompletedTask;
+
         public string GetOperatorImage(OperatorConfig config) => "image";
+    }
+
+    private sealed class OrderedNamespaceProvisioner : INamespaceProvisioner
+    {
+        private readonly List<string> calls;
+
+        public OrderedNamespaceProvisioner(List<string> calls)
+        {
+            this.calls = calls;
+        }
+
+        public NamespaceProvisioningTasks StartNamespaceProvisioning(IKubernetesClient client, OperatorConfig config)
+        {
+            calls.Add("namespace.StartNamespaceProvisioning");
+            return new NamespaceProvisioningTasks(Task.CompletedTask, Task.CompletedTask, Task.CompletedTask);
+        }
+    }
+
+    private sealed class OrderedFluxCDProvisioner : IFluxCDProvisioner
+    {
+        private readonly List<string> calls;
+
+        public OrderedFluxCDProvisioner(List<string> calls)
+        {
+            this.calls = calls;
+        }
+
+        public Task ApplyCrdManifestsAsync(IKubernetesClient client, OperatorConfig config)
+        {
+            calls.Add("fluxcd.ApplyCrdManifestsAsync");
+            return Task.CompletedTask;
+        }
+
+        public Task ApplySourceControllerAsync(IKubernetesClient client, OperatorConfig config)
+        {
+            calls.Add("fluxcd.ApplySourceControllerAsync");
+            return Task.CompletedTask;
+        }
+
+        public Task WaitForSourceControllerReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout)
+        {
+            calls.Add("fluxcd.WaitForSourceControllerReadyAsync");
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class OrderedPulumiOperatorProvisioner : IPulumiOperatorProvisioner
+    {
+        private readonly List<string> calls;
+
+        public OrderedPulumiOperatorProvisioner(List<string> calls)
+        {
+            this.calls = calls;
+        }
+
+        public Task ApplyCrdManifestsAsync(IKubernetesClient client)
+        {
+            calls.Add("operator.ApplyCrdManifestsAsync");
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyRbacManifestsAsync(IKubernetesClient client, string targetNamespace)
+        {
+            calls.Add("operator.ApplyRbacManifestsAsync");
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyOperatorDeploymentAsync(IKubernetesClient client, OperatorConfig config)
+        {
+            calls.Add("operator.ApplyOperatorDeploymentAsync");
+            return Task.CompletedTask;
+        }
+
+        public Task WaitForOperatorReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout)
+        {
+            calls.Add("operator.WaitForOperatorReadyAsync");
+            return Task.CompletedTask;
+        }
+
+        public Task CreateDataPlaneConfigSecretAsync(IKubernetesClient client, OperatorConfig config)
+        {
+            calls.Add("operator.CreateDataPlaneConfigSecretAsync");
+            return Task.CompletedTask;
+        }
+
+        public string GetOperatorImage(OperatorConfig config) => "image";
+    }
+
+    private sealed class OrderedPulumiStackProvisioner : IPulumiStackProvisioner
+    {
+        private readonly List<string> calls;
+
+        public OrderedPulumiStackProvisioner(List<string> calls)
+        {
+            this.calls = calls;
+        }
+
+        public Task ApplyPulumiStackRbacAsync(
+            IKubernetesClient client,
+            string namespaceName,
+            string serviceAccountName,
+            OperatorConfig config,
+            IEnumerable<string> targetNamespaces)
+        {
+            calls.Add("stack.ApplyPulumiStackRbacAsync");
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyPulumiStackAsync(IKubernetesClient client, string serviceAccountName, OperatorConfig config)
+        {
+            calls.Add("stack.ApplyPulumiStackAsync");
+            return Task.CompletedTask;
+        }
+
+        public Task CreatePulumiStatePvcAsync(IKubernetesClient client, OperatorConfig config)
+        {
+            calls.Add("stack.CreatePulumiStatePvcAsync");
+            return Task.CompletedTask;
+        }
     }
 }

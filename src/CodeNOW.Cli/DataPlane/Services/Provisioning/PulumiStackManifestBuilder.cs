@@ -21,7 +21,6 @@ internal sealed class PulumiStackManifestBuilder
     internal const string PulumiStatePath = "/pulumi-state";
 
     private readonly IPulumiOperatorProvisioner operatorProvisioner;
-    private readonly DataPlaneConfigSecretBuilder configSecretBuilder;
     private readonly string runtimeImage;
     private readonly string pluginsImage;
 
@@ -30,11 +29,9 @@ internal sealed class PulumiStackManifestBuilder
     /// </summary>
     public PulumiStackManifestBuilder(
         IPulumiOperatorProvisioner operatorProvisioner,
-        DataPlaneConfigSecretBuilder configSecretBuilder,
         IPulumiOperatorInfoProvider operatorInfoProvider)
     {
         this.operatorProvisioner = operatorProvisioner;
-        this.configSecretBuilder = configSecretBuilder;
         var info = operatorInfoProvider.GetInfo();
         runtimeImage = info.RuntimeImage;
         pluginsImage = info.PluginsImage;
@@ -143,19 +140,6 @@ internal sealed class PulumiStackManifestBuilder
         ApplySystemLabelsToPath(stack, "spec.workspaceTemplate.spec.podTemplate.metadata");
 
         return stack;
-    }
-
-    /// <summary>
-    /// Builds the operator configuration secret.
-    /// </summary>
-    /// <param name="config">Operator configuration values.</param>
-    /// <returns>Kubernetes secret object.</returns>
-    public V1Secret BuildDataPlaneConfigSecret(OperatorConfig config)
-    {
-        var secret = configSecretBuilder.Build(config);
-        ApplyStackLabels(secret.Metadata);
-
-        return secret;
     }
 
     /// <summary>

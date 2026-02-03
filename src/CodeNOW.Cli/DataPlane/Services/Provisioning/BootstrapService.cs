@@ -82,6 +82,8 @@ public class BootstrapService : IBootstrapService
             fluxcdCrdTask = fluxcdProvisioner.ApplyCrdManifestsAsync(client, config);
 
         await namespaceTasks.SystemNamespace;
+        await operatorProvisioner.CreateDataPlaneConfigSecretAsync(client, config);
+
         if (config.FluxCD?.Enabled == true)
         {
             await (fluxcdCrdTask ?? Task.CompletedTask);
@@ -120,10 +122,9 @@ public class BootstrapService : IBootstrapService
                 config.Kubernetes.Namespaces.Cni.Name,
                 config.Kubernetes.Namespaces.CiPipelines.Name
             ]);
-        var operatorConfigSecretTask = stackProvisioner.CreateDataPlaneConfigSecretAsync(client, config);
         var statePvcTask = stackProvisioner.CreatePulumiStatePvcAsync(client, config);
 
-        await Task.WhenAll(stackRbacTask, operatorConfigSecretTask, statePvcTask);
+        await Task.WhenAll(stackRbacTask, statePvcTask);
         await stackProvisioner.ApplyPulumiStackAsync(client, serviceAccountName, config);
 
         logger.LogInformation("Bootstrap finished.");
