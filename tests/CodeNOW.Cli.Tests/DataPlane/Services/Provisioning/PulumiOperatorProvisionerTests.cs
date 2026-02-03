@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http;
 using System.Text;
 using CodeNOW.Cli.Adapters.Kubernetes;
 using CodeNOW.Cli.Common.Yaml;
@@ -234,12 +236,72 @@ public class PulumiOperatorProvisionerTests
                     StringComparison.Ordinal)));
     }
 
+    [Fact]
+    public async Task CreateDataPlaneConfigSecretAsync_ReplacesWhenPresent()
+    {
+        var client = new FakeKubernetesClient();
+        client.CoreV1.ReadNamespacedSecretAsyncHandler = (_, _) =>
+            Task.FromResult(new V1Secret { Metadata = new V1ObjectMeta { ResourceVersion = "1" } });
+
+        var replaced = false;
+        client.CoreV1.ReplaceNamespacedSecretAsyncHandler = (secret, _, _) =>
+        {
+            replaced = true;
+            Assert.Equal("1", secret.Metadata.ResourceVersion);
+            return Task.CompletedTask;
+        };
+
+        var created = false;
+        client.CoreV1.CreateNamespacedSecretAsyncHandler = (_, _) =>
+        {
+            created = true;
+            return Task.CompletedTask;
+        };
+
+        var provisioner = BuildProvisioner();
+        var config = new OperatorConfig
+        {
+            Kubernetes = { Namespaces = { System = { Name = "system" } } }
+        };
+
+        await provisioner.CreateDataPlaneConfigSecretAsync(client, config);
+
+        Assert.True(replaced);
+        Assert.False(created);
+    }
+
+    [Fact]
+    public async Task CreateDataPlaneConfigSecretAsync_CreatesWhenMissing()
+    {
+        var client = new FakeKubernetesClient();
+        client.CoreV1.ReadNamespacedSecretAsyncHandler = (_, _) =>
+            throw CreateNotFound();
+
+        var created = false;
+        client.CoreV1.CreateNamespacedSecretAsyncHandler = (_, _) =>
+        {
+            created = true;
+            return Task.CompletedTask;
+        };
+
+        var provisioner = BuildProvisioner();
+        var config = new OperatorConfig
+        {
+            Kubernetes = { Namespaces = { System = { Name = "system" } } }
+        };
+
+        await provisioner.CreateDataPlaneConfigSecretAsync(client, config);
+
+        Assert.True(created);
+    }
+
     private static PulumiOperatorProvisioner BuildProvisioner()
     {
         var logger = new NullLogger<PulumiOperatorProvisioner>();
         var yaml = new YamlToJsonConverter();
+        var configSecretBuilder = new DataPlaneConfigSecretBuilder();
         var infoProvider = new FakeOperatorInfoProvider();
-        return new PulumiOperatorProvisioner(logger, yaml, infoProvider);
+        return new PulumiOperatorProvisioner(logger, yaml, configSecretBuilder, infoProvider);
     }
 
     private sealed class FakeOperatorInfoProvider : IPulumiOperatorInfoProvider
@@ -258,5 +320,15 @@ public class PulumiOperatorProvisionerTests
         File.WriteAllText(Path.Combine(root, "rbac", "rbac.yaml"), rbacYaml);
         File.WriteAllText(Path.Combine(root, "crd", "crd.yaml"), crdYaml);
         File.WriteAllText(Path.Combine(root, "manager", "manager.yaml"), managerYaml);
+    }
+
+    private static k8s.Autorest.HttpOperationException CreateNotFound()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.NotFound);
+        var wrapper = new k8s.Autorest.HttpResponseMessageWrapper(response, string.Empty);
+        return new k8s.Autorest.HttpOperationException("Not Found")
+        {
+            Response = wrapper
+        };
     }
 }

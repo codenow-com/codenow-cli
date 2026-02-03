@@ -143,65 +143,6 @@ public class PulumiStackProvisionerTests
     }
 
     [Fact]
-    public async Task CreateDataPlaneConfigSecretAsync_ReplacesWhenPresent()
-    {
-        var client = new FakeKubernetesClient();
-        client.CoreV1.ReadNamespacedSecretAsyncHandler = (_, _) =>
-            Task.FromResult(new V1Secret { Metadata = new V1ObjectMeta { ResourceVersion = "1" } });
-
-        var replaced = false;
-        client.CoreV1.ReplaceNamespacedSecretAsyncHandler = (secret, _, _) =>
-        {
-            replaced = true;
-            Assert.Equal("1", secret.Metadata.ResourceVersion);
-            return Task.CompletedTask;
-        };
-
-        var created = false;
-        client.CoreV1.CreateNamespacedSecretAsyncHandler = (_, _) =>
-        {
-            created = true;
-            return Task.CompletedTask;
-        };
-
-        var provisioner = BuildProvisioner();
-        var config = new OperatorConfig
-        {
-            Kubernetes = { Namespaces = { System = { Name = "system" } } }
-        };
-
-        await provisioner.CreateDataPlaneConfigSecretAsync(client, config);
-
-        Assert.True(replaced);
-        Assert.False(created);
-    }
-
-    [Fact]
-    public async Task CreateDataPlaneConfigSecretAsync_CreatesWhenMissing()
-    {
-        var client = new FakeKubernetesClient();
-        client.CoreV1.ReadNamespacedSecretAsyncHandler = (_, _) =>
-            throw CreateNotFound();
-
-        var created = false;
-        client.CoreV1.CreateNamespacedSecretAsyncHandler = (_, _) =>
-        {
-            created = true;
-            return Task.CompletedTask;
-        };
-
-        var provisioner = BuildProvisioner();
-        var config = new OperatorConfig
-        {
-            Kubernetes = { Namespaces = { System = { Name = "system" } } }
-        };
-
-        await provisioner.CreateDataPlaneConfigSecretAsync(client, config);
-
-        Assert.True(created);
-    }
-
-    [Fact]
     public async Task ApplyPulumiStackAsync_PatchesStackCustomObject()
     {
         var client = new FakeKubernetesClient();
@@ -284,9 +225,8 @@ public class PulumiStackProvisionerTests
     private static PulumiStackProvisioner BuildProvisioner()
     {
         var operatorProvisioner = new FakePulumiOperatorProvisioner();
-        var configSecretBuilder = new DataPlaneConfigSecretBuilder();
         var operatorInfoProvider = new FakeOperatorInfoProvider();
-        var manifestBuilder = new PulumiStackManifestBuilder(operatorProvisioner, configSecretBuilder, operatorInfoProvider);
+        var manifestBuilder = new PulumiStackManifestBuilder(operatorProvisioner, operatorInfoProvider);
         return new PulumiStackProvisioner(new NullLogger<PulumiStackProvisioner>(), manifestBuilder);
     }
 
@@ -296,6 +236,7 @@ public class PulumiStackProvisionerTests
         public Task ApplyRbacManifestsAsync(IKubernetesClient client, string targetNamespace) => Task.CompletedTask;
         public Task ApplyOperatorDeploymentAsync(IKubernetesClient client, OperatorConfig config) => Task.CompletedTask;
         public Task WaitForOperatorReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout) => Task.CompletedTask;
+        public Task CreateDataPlaneConfigSecretAsync(IKubernetesClient client, OperatorConfig config) => Task.CompletedTask;
         public string GetOperatorImage(OperatorConfig config) => "operator-image";
     }
 

@@ -35,12 +35,6 @@ public interface IPulumiStackProvisioner
     /// <param name="config">Operator configuration settings.</param>
     Task ApplyPulumiStackAsync(IKubernetesClient client, string serviceAccountName, OperatorConfig config);
     /// <summary>
-    /// Creates or updates the operator configuration secret.
-    /// </summary>
-    /// <param name="client">Kubernetes client used to apply resources.</param>
-    /// <param name="config">Operator configuration settings.</param>
-    Task CreateDataPlaneConfigSecretAsync(IKubernetesClient client, OperatorConfig config);
-    /// <summary>
     /// Creates or updates the Pulumi state PVC when using local state (S3 disabled).
     /// </summary>
     /// <param name="client">Kubernetes client used to apply resources.</param>
@@ -367,34 +361,6 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
             name: stackName,
             fieldManager: KubernetesConstants.FieldManager,
             force: true);
-    }
-
-    /// <inheritdoc />
-    public async Task CreateDataPlaneConfigSecretAsync(
-        IKubernetesClient client,
-        OperatorConfig config)
-    {
-        var secret = manifestBuilder.BuildDataPlaneConfigSecret(config);
-
-        try
-        {
-            var existing = await client.CoreV1.ReadNamespacedSecretAsync(
-                DataPlaneConstants.OperatorConfigSecretName,
-                config.Kubernetes.Namespaces.System.Name);
-            secret.Metadata.ResourceVersion = existing.Metadata.ResourceVersion;
-
-            await client.CoreV1.ReplaceNamespacedSecretAsync(
-                secret,
-                DataPlaneConstants.OperatorConfigSecretName,
-                config.Kubernetes.Namespaces.System.Name);
-        }
-        catch (k8s.Autorest.HttpOperationException ex)
-            when (ex.Response.StatusCode == HttpStatusCode.NotFound)
-        {
-            await client.CoreV1.CreateNamespacedSecretAsync(
-                secret,
-                config.Kubernetes.Namespaces.System.Name);
-        }
     }
 
     /// <inheritdoc />
