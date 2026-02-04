@@ -1,4 +1,5 @@
 using CodeNOW.Cli.Common.Console.Commands;
+using CodeNOW.Cli.Common.Console.Presentation;
 using CodeNOW.Cli.DataPlane.Console.Models;
 using CodeNOW.Cli.DataPlane.Console.Prompts;
 using CodeNOW.Cli.DataPlane.Console.Supports;
@@ -18,12 +19,14 @@ public class BootstrapCommand(
     ILogger<BootstrapCommand> logger,
     IBootstrapService bootstrapService,
     IPulumiOperatorInfoProvider operatorInfoProvider,
-    IFluxCDInfoProvider fluxcdInfoProvider)
+    IFluxCDInfoProvider fluxcdInfoProvider,
+    KubernetesConnectionGuard connectionGuard)
 {
     private readonly BootstrapConfigStore configStore = new();
     private readonly BootstrapWizard wizard = new();
     private readonly IPulumiOperatorInfoProvider operatorInfoProvider = operatorInfoProvider;
     private readonly IFluxCDInfoProvider fluxcdInfoProvider = fluxcdInfoProvider;
+    private readonly KubernetesConnectionGuard connectionGuard = connectionGuard;
 
     /// <summary>
     /// Bootstraps the Kubernetes cluster for Data Plane installation.
@@ -42,6 +45,9 @@ public class BootstrapCommand(
         bool fluxcdSkipCrds = false,
         bool pulumiSkipCrds = false)
     {
+        if (!await connectionGuard.EnsureConnectedAsync())
+            return 1;
+
         var configSource = ResolveConfigSource(config);
         var fluxcdEnableValue = false;
         var fluxcdSkipCrdsValue = false;
@@ -229,7 +235,7 @@ public class BootstrapCommand(
     /// </summary>
     private static void PrintInvalidEncryptionKeyMessage()
     {
-        PrintError("Invalid encryption key or corrupted configuration file.");
+        ConsoleErrorPrinter.PrintError("Invalid encryption key or corrupted configuration file.");
         AnsiConsole.MarkupLine("[grey]Please try again.[/]\n");
     }
 
@@ -243,7 +249,7 @@ public class BootstrapCommand(
             fromArgs = true;
             if (!File.Exists(configPath))
             {
-                PrintError(
+                ConsoleErrorPrinter.PrintError(
                     "Configuration file not found.",
                     $"Provided path: {Markup.Escape(Path.GetFullPath(configPath))}");
                 filePath = "";
@@ -273,7 +279,7 @@ public class BootstrapCommand(
 
             if (!File.Exists(filePath))
             {
-                PrintError(
+                ConsoleErrorPrinter.PrintError(
                     "Configuration file not found.",
                     $"Provided path: {Markup.Escape(Path.GetFullPath(filePath))}");
                 continue;
@@ -293,7 +299,7 @@ public class BootstrapCommand(
         if (!string.IsNullOrWhiteSpace(encryptionKey))
             return (null, encryptionKey);
 
-        PrintError("Encryption key is required when using --config.");
+        ConsoleErrorPrinter.PrintError("Encryption key is required when using --config.");
         AnsiConsole.MarkupLine(
             "[grey]Set the key using the " + EnvironmentVariables.OperatorEncryptionKey + " environment variable.[/]\n");
         AnsiConsole.MarkupLine(
@@ -355,27 +361,14 @@ public class BootstrapCommand(
             {
                 if (attempt == maxAttempts)
                 {
-                    PrintError("Too many failed attempts. Unable to decrypt the configuration file.");
+                    ConsoleErrorPrinter.PrintError(
+                        "Too many failed attempts. Unable to decrypt the configuration file.");
                     return Result.Fail();
                 }
                 PrintInvalidEncryptionKeyMessage();
             }
 
         return Result.Fail();
-    }
-
-    /// <summary>
-    /// Prints an error message in a standard format.
-    /// </summary>
-    private static void PrintError(string message, string? details = null)
-    {
-        if (string.IsNullOrWhiteSpace(details))
-        {
-            AnsiConsole.MarkupLine($"[red]Error: {message}[/]\n");
-            return;
-        }
-
-        AnsiConsole.MarkupLine($"[red]Error: {message}\n{details}[/]\n");
     }
 
     /// <summary>

@@ -4,6 +4,7 @@ using CodeNOW.Cli.DataPlane.Console.Logs;
 using CodeNOW.Cli.DataPlane.Console.Models;
 using CodeNOW.Cli.DataPlane.Console.Renders;
 using CodeNOW.Cli.DataPlane.Console.Runtimes;
+using CodeNOW.Cli.DataPlane.Console.Supports;
 using CodeNOW.Cli.DataPlane.Models;
 using CodeNOW.Cli.DataPlane.Services.Operations;
 using ConsoleAppFramework;
@@ -15,12 +16,17 @@ namespace CodeNOW.Cli.DataPlane.Console.Commands;
 /// CLI command for displaying the data plane dashboard.
 /// </summary>
 [HideBanner]
-public class DashboardCommand(IManagementService managementService)
+public class DashboardCommand(
+    IManagementService managementService,
+    KubernetesConnectionGuard connectionGuard)
 {
     /// <summary>Displays a management dashboard with the current state of the Data Plane.</summary>
     [Command("dashboard")]
     public async Task Dashboard()
     {
+        if (!await connectionGuard.EnsureConnectedAsync())
+            return;
+
         var currentView = LogView.Workspace;
         var options = new DashboardOptions(
             RefreshMs: 1000,
