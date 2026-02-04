@@ -1,5 +1,4 @@
 ﻿using CodeNOW.Cli.DataPlane.Console.Commands;
-using CodeNOW.Cli.DataPlane.Console.Filters;
 using CodeNOW.Cli.DataPlane.Services.Operations;
 using CodeNOW.Cli.DataPlane.Services.Provisioning;
 using CodeNOW.Cli.Adapters.Kubernetes;
@@ -36,10 +35,11 @@ public static class Program
         EnsureConsoleAppVersion();
         AnsiConsole.Clear();
         var bannerPolicy = new BannerVisibilityPolicy(
-            [
-                new CommandDescriptor("dp", "bootstrap", HideBanner: false),
-                new CommandDescriptor("dp", "dashboard", HideBanner: true)
-            ]);
+        [
+            new CommandDescriptor("dp", "bootstrap", HideBanner: false),
+                new CommandDescriptor("dp", "dashboard", HideBanner: true),
+                new CommandDescriptor("dp", "config", HideBanner: false)
+        ]);
         if (bannerPolicy.ShouldShowBanner(args))
         {
             var banner = @"
@@ -88,6 +88,8 @@ public static class Program
             services.AddSingleton<IPulumiStackProvisioner, PulumiStackProvisioner>();
             services.AddSingleton<IBootstrapService, BootstrapService>();
             services.AddSingleton<IManagementService, ManagementService>();
+            services.AddSingleton<OperatorConfigService>();
+            services.AddSingleton<DataPlane.Console.Supports.KubernetesConnectionGuard>();
             services.AddLogging(logging =>
             {
                 logging.ClearProviders();
@@ -102,9 +104,9 @@ public static class Program
             });
         });
 
-        app.UseFilter<KubernetesConnectionFilter>();
         app.Add<BootstrapCommand>("dp");
         app.Add<DashboardCommand>("dp");
+        app.Add<ConfigCommand>("dp");
         app.Run(args);
     }
 
