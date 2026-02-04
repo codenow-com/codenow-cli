@@ -22,7 +22,9 @@ public class PulumiStackManifestBuilderTests
             {
                 Enabled = true,
                 AuthenticationMethod = S3AuthenticationMethod.AccessKeySecretKey,
-                Url = "s3://bucket",
+                Url = "https://s3.example.com",
+                Bucket = "bucket",
+                Region = "us-east-1",
                 AccessKey = "access",
                 SecretKey = "secret"
             }
@@ -33,7 +35,7 @@ public class PulumiStackManifestBuilderTests
 
         Assert.NotNull(envRefs["AWS_ACCESS_KEY_ID"]);
         Assert.NotNull(envRefs["AWS_SECRET_ACCESS_KEY"]);
-        Assert.Equal("s3://bucket", stack["spec"]!.AsObject()["backend"]!.GetValue<string>());
+        Assert.Equal("s3://bucket/pulumi/dev?region=us-east-1&endpoint=https://s3.example.com&s3ForcePathStyle=true", stack["spec"]!.AsObject()["backend"]!.GetValue<string>());
     }
 
     [Fact]
