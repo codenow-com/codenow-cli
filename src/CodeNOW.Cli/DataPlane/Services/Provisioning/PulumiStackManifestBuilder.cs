@@ -19,6 +19,10 @@ internal sealed class PulumiStackManifestBuilder
     /// Default Pulumi backend path for local state.
     /// </summary>
     internal const string PulumiStatePath = "/pulumi-state";
+    /// <summary>
+    /// Default Pulumi S3 state prefix.
+    /// </summary>
+    internal const string PulumiS3StatePrefix = "pulumi";
 
     private readonly IPulumiOperatorProvisioner operatorProvisioner;
     private readonly string runtimeImage;
@@ -48,7 +52,7 @@ internal sealed class PulumiStackManifestBuilder
         var stackName = DataPlaneConstants.StackName;
         var image = BuildPulumiImage(config);
         var backendUrl = config.S3.Enabled
-            ? config.S3.Url
+            ? $"s3://{config.S3.Bucket}/{PulumiS3StatePrefix}/{config.Environment.Name}?region={config.S3.Region}&endpoint={config.S3.Url}&s3ForcePathStyle=true"
             : $"file:///{PulumiStatePath}";
 
         var stack = new JsonObject
