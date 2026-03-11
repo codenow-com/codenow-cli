@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using CodeNOW.Cli.DataPlane;
 using CodeNOW.Cli.DataPlane.Models;
 using CodeNOW.Cli.DataPlane.Services.Provisioning;
@@ -102,6 +103,31 @@ public class DataPlaneConfigSecretBuilderTests
         Assert.Equal("access", GetString(data, DataPlaneConstants.DataPlaneConfigKeyS3StorageAccessKey));
         Assert.Equal("secret", GetString(data, DataPlaneConstants.DataPlaneConfigKeyS3StorageSecretKey));
         Assert.Equal("eu-central-1", GetString(data, DataPlaneConstants.DataPlaneConfigKeyS3StorageRegion));
+    }
+
+    [Fact]
+    public void Build_AddsS3IamRoleAsEksRoleArnAnnotationJson()
+    {
+        var builder = new DataPlaneConfigSecretBuilder();
+        var config = new OperatorConfig
+        {
+            S3 =
+            {
+                Enabled = true,
+                AuthenticationMethod = S3AuthenticationMethod.IAMRole,
+                IAMRole = "arn:aws:iam::123456789012:role/my-s3-access-role"
+            }
+        };
+
+        var secret = builder.Build(config);
+        var data = secret.Data!;
+        var json = GetString(data, DataPlaneConstants.DataPlaneConfigKeyS3StorageAccessRole);
+        var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(
+            "arn:aws:iam::123456789012:role/my-s3-access-role",
+            parsed!["eks.amazonaws.com/role-arn"]);
     }
 
     private static string GetString(IDictionary<string, byte[]> data, string key)

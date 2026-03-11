@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using CodeNOW.Cli.DataPlane.Models;
 using k8s.Models;
 
@@ -130,7 +131,11 @@ internal sealed class DataPlaneConfigSecretBuilder
         if (!string.IsNullOrWhiteSpace(s3SecretKey))
             data[DataPlaneConstants.DataPlaneConfigKeyS3StorageSecretKey] = Encoding.UTF8.GetBytes(s3SecretKey);
         if (!string.IsNullOrWhiteSpace(s3IamRole))
-            data[DataPlaneConstants.DataPlaneConfigKeyS3StorageAccessRole] = Encoding.UTF8.GetBytes(s3IamRole);
+        {
+            var encodedRole = JsonEncodedText.Encode(s3IamRole).ToString();
+            var s3IamRoleAnnotation = $"{{\"eks.amazonaws.com/role-arn\":\"{encodedRole}\"}}";
+            data[DataPlaneConstants.DataPlaneConfigKeyS3StorageAccessRole] = Encoding.UTF8.GetBytes(s3IamRoleAnnotation);
+        }
         if (!string.IsNullOrWhiteSpace(s3Region))
             data[DataPlaneConstants.DataPlaneConfigKeyS3StorageRegion] = Encoding.UTF8.GetBytes(s3Region);
         if (!string.IsNullOrWhiteSpace(podPlacementMode))
