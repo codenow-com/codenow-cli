@@ -1,6 +1,9 @@
 using CodeNOW.Cli.Adapters.Kubernetes;
 using CodeNOW.Cli.DataPlane.Models;
 using CodeNOW.Cli.DataPlane.Services.Provisioning;
+using k8s;
+using k8s.Models;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -229,6 +232,8 @@ public class BootstrapServiceTests
             Called = true;
             return new NamespaceProvisioningTasks(Task.CompletedTask, Task.CompletedTask, Task.CompletedTask);
         }
+
+        public List<IKubernetesObject<V1ObjectMeta>> BuildNamespaceResources(OperatorConfig config) => [];
     }
 
     private sealed class FakePulumiOperatorProvisioner : IPulumiOperatorProvisioner
@@ -270,7 +275,11 @@ public class BootstrapServiceTests
         }
 
         public string GetOperatorImage(OperatorConfig config) => "image";
+        public List<IKubernetesObject<V1ObjectMeta>> BuildRbacResources(string targetNamespace) => [];
+        public List<IKubernetesObject<V1ObjectMeta>> BuildOperatorDeploymentResources(OperatorConfig config) => [];
+        public List<JsonObject> BuildCrdManifests() => [];
     }
+
 
     private sealed class FakeFluxCDProvisioner : IFluxCDProvisioner
     {
@@ -332,6 +341,11 @@ public class BootstrapServiceTests
 
         public Task CreatePulumiStatePvcAsync(IKubernetesClient client, OperatorConfig config)
             => Task.CompletedTask;
+
+        public List<IKubernetesObject<V1ObjectMeta>> BuildPulumiStackRbacResources(
+            string namespaceName, string serviceAccountName, OperatorConfig config, IEnumerable<string> targetNamespaces) => [];
+
+        public V1PersistentVolumeClaim BuildPulumiStatePvcResource(OperatorConfig config) => new();
     }
 
     private sealed class SequencedPulumiOperatorProvisioner : IPulumiOperatorProvisioner
@@ -366,6 +380,9 @@ public class BootstrapServiceTests
             => Task.CompletedTask;
 
         public string GetOperatorImage(OperatorConfig config) => "image";
+        public List<IKubernetesObject<V1ObjectMeta>> BuildRbacResources(string targetNamespace) => [];
+        public List<IKubernetesObject<V1ObjectMeta>> BuildOperatorDeploymentResources(OperatorConfig config) => [];
+        public List<JsonObject> BuildCrdManifests() => [];
     }
 
     private sealed class OrderedNamespaceProvisioner : INamespaceProvisioner
@@ -382,6 +399,8 @@ public class BootstrapServiceTests
             calls.Add("namespace.StartNamespaceProvisioning");
             return new NamespaceProvisioningTasks(Task.CompletedTask, Task.CompletedTask, Task.CompletedTask);
         }
+
+        public List<IKubernetesObject<V1ObjectMeta>> BuildNamespaceResources(OperatorConfig config) => [];
     }
 
     private sealed class OrderedFluxCDProvisioner : IFluxCDProvisioner
@@ -452,6 +471,9 @@ public class BootstrapServiceTests
         }
 
         public string GetOperatorImage(OperatorConfig config) => "image";
+        public List<IKubernetesObject<V1ObjectMeta>> BuildRbacResources(string targetNamespace) => [];
+        public List<IKubernetesObject<V1ObjectMeta>> BuildOperatorDeploymentResources(OperatorConfig config) => [];
+        public List<JsonObject> BuildCrdManifests() => [];
     }
 
     private sealed class OrderedPulumiStackProvisioner : IPulumiStackProvisioner
@@ -485,5 +507,10 @@ public class BootstrapServiceTests
             calls.Add("stack.CreatePulumiStatePvcAsync");
             return Task.CompletedTask;
         }
+
+        public List<IKubernetesObject<V1ObjectMeta>> BuildPulumiStackRbacResources(
+            string namespaceName, string serviceAccountName, OperatorConfig config, IEnumerable<string> targetNamespaces) => [];
+
+        public V1PersistentVolumeClaim BuildPulumiStatePvcResource(OperatorConfig config) => new();
     }
 }

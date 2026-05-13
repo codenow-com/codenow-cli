@@ -224,24 +224,12 @@ internal sealed class BootstrapWizard
     {
         WriteSection("Kubernetes");
         AnsiConsole.MarkupLine("[grey]Namespaces[/]");
-        opConfig.Kubernetes.Namespaces.System.Name = PromptText(
-            promptFactory,
-            "• System [green](cn-data-plane-system)[/]             :",
-            initialValue: usePrefill ? opConfig.Kubernetes.Namespaces.System.Name : null,
-            defaultValue: "cn-data-plane-system",
-            showDefaultValue: false);
-        opConfig.Kubernetes.Namespaces.Cni.Name = PromptText(
-            promptFactory,
-            "• CNI [green](cn-data-plane-cni)[/]                   :",
-            initialValue: usePrefill ? opConfig.Kubernetes.Namespaces.Cni.Name : null,
-            defaultValue: "cn-data-plane-cni",
-            showDefaultValue: false);
-        opConfig.Kubernetes.Namespaces.CiPipelines.Name = PromptText(
-            promptFactory,
-            "• CI Pipelines [green](cn-data-plane-ci-pipelines)[/] :",
-            initialValue: usePrefill ? opConfig.Kubernetes.Namespaces.CiPipelines.Name : null,
-            defaultValue: "cn-data-plane-ci-pipelines",
-            showDefaultValue: false);
+        opConfig.Kubernetes.Namespaces.System.Name = NamespacePrompts.PromptSystemNamespace(
+            promptFactory, usePrefill ? opConfig.Kubernetes.Namespaces.System.Name : null);
+        opConfig.Kubernetes.Namespaces.Cni.Name = NamespacePrompts.PromptCniNamespace(
+            promptFactory, usePrefill ? opConfig.Kubernetes.Namespaces.Cni.Name : null);
+        opConfig.Kubernetes.Namespaces.CiPipelines.Name = NamespacePrompts.PromptCiPipelinesNamespace(
+            promptFactory, usePrefill ? opConfig.Kubernetes.Namespaces.CiPipelines.Name : null);
         AnsiConsole.MarkupLine("[grey]Node labels[/]");
         opConfig.Kubernetes.NodeLabels.System.Key = PromptText(
             promptFactory,

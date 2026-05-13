@@ -37,14 +37,19 @@ public class BootstrapCommand(
     /// <param name="fluxcdEnable">Enable installation of FluxCD components. Applies only when generating a new config.</param>
     /// <param name="fluxcdSkipCrds">Skip FluxCD CRD installation when FluxCD is enabled. Applies only when generating a new config.</param>
     /// <param name="pulumiSkipCrds">Skip Pulumi operator CRD installation. Applies only when generating a new config.</param>
+    /// <param name="showPermissionsOnly">Print the minimum ClusterRole permissions required for bootstrap and exit.</param>
     /// <returns>Process exit code.</returns>
     [Command("bootstrap")]
     public async Task<int> Bootstrap(
         [HideDefaultValue] string config = "",
         bool fluxcdEnable = false,
         bool fluxcdSkipCrds = false,
-        bool pulumiSkipCrds = false)
+        bool pulumiSkipCrds = false,
+        bool showPermissionsOnly = false)
     {
+        if (showPermissionsOnly)
+            return PrintPermissions();
+
         if (!await connectionGuard.EnsureConnectedAsync())
             return 1;
 
@@ -389,4 +394,67 @@ public class BootstrapCommand(
             opConfig.Pulumi.Images.PluginsVersion = info.PluginsVersion;
     }
 
+    /// <summary>
+    /// Prints the minimum ClusterRole permissions required for bootstrap.
+    /// </summary>
+    private int PrintPermissions()
+    {
+        string namespaceName, cniNamespace, ciPipelinesNamespace;
+        if (System.Console.IsInputRedirected || !Environment.UserInteractive)
+        {
+            namespaceName = DataPlaneConstants.DefaultSystemNamespace;
+            cniNamespace = DataPlaneConstants.DefaultCniNamespace;
+            ciPipelinesNamespace = DataPlaneConstants.DefaultCiPipelinesNamespace;
+        }
+        else
+        {
+            namespaceName = NamespacePrompts.PromptSystemNamespace();
+            cniNamespace = NamespacePrompts.PromptCniNamespace();
+            ciPipelinesNamespace = NamespacePrompts.PromptCiPipelinesNamespace();
+        }
+
+        var serviceAccountName = DataPlaneConstants.ServiceAccountName;
+
+        // Build a minimal config for the recording run
+        var opConfig = new OperatorConfig();
+        opConfig.Kubernetes.Namespaces.System.Name = namespaceName;
+        opConfig.Kubernetes.Namespaces.Cni.Name = cniNamespace;
+        opConfig.Kubernetes.Namespaces.CiPipelines.Name = ciPipelinesNamespace;
+
+        // Run bootstrap against a recording client to capture all operations
+        var recordingClient = new Adapters.Kubernetes.RecordingKubernetesClient();
+        var recordingFactory = new Adapters.Kubernetes.RecordingKubernetesClientFactory(recordingClient);
+        var recordingBootstrap = new BootstrapService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<BootstrapService>.Instance,
+            recordingFactory,
+            new Adapters.Kubernetes.KubernetesConnectionOptions(),
+            new NamespaceProvisioner(Microsoft.Extensions.Logging.Abstractions.NullLogger<NamespaceProvisioner>.Instance),
+            new FluxCDProvisioner(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<FluxCDProvisioner>.Instance,
+                new Common.Yaml.YamlToJsonConverter(),
+                new FluxCDInfoProvider()),
+            new PulumiOperatorProvisioner(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<PulumiOperatorProvisioner>.Instance,
+                new Common.Yaml.YamlToJsonConverter(),
+                new DataPlaneConfigSecretBuilder(),
+                new PulumiOperatorInfoProvider()),
+            new PulumiStackProvisioner(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<PulumiStackProvisioner>.Instance,
+                new PulumiStackManifestBuilder(
+                    new PulumiOperatorProvisioner(
+                        Microsoft.Extensions.Logging.Abstractions.NullLogger<PulumiOperatorProvisioner>.Instance,
+                        new Common.Yaml.YamlToJsonConverter(),
+                        new DataPlaneConfigSecretBuilder(),
+                        new PulumiOperatorInfoProvider()),
+                    new PulumiOperatorInfoProvider())));
+
+        recordingBootstrap.BootstrapAsync(opConfig).GetAwaiter().GetResult();
+
+        var deployerClusterRole = BootstrapManifestPrinter.BuildDeployerClusterRole(
+            serviceAccountName, recordingClient.Operations, recordingClient.AppliedObjects);
+
+        var yaml = BootstrapManifestPrinter.ToYaml([deployerClusterRole]);
+        System.Console.Write(yaml);
+        return 0;
+    }
 }

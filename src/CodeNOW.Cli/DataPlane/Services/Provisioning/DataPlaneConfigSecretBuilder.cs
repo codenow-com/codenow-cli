@@ -8,7 +8,7 @@ namespace CodeNOW.Cli.DataPlane.Services.Provisioning;
 /// <summary>
 /// Builds the operator configuration secret data from configuration.
 /// </summary>
-internal sealed class DataPlaneConfigSecretBuilder
+public sealed class DataPlaneConfigSecretBuilder
 {
     /// <summary>
     /// Builds the Kubernetes secret for operator configuration.

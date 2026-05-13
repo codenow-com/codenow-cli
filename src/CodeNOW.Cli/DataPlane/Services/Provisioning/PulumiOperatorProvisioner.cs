@@ -2,6 +2,7 @@ using CodeNOW.Cli.Adapters.Kubernetes;
 using CodeNOW.Cli.Common.Json;
 using CodeNOW.Cli.Common.Yaml;
 using CodeNOW.Cli.DataPlane.Models;
+using k8s;
 using k8s.Models;
 using Microsoft.Extensions.Logging;
 using System.Net;
@@ -49,6 +50,21 @@ public interface IPulumiOperatorProvisioner
     /// </summary>
     /// <param name="config">Operator configuration settings.</param>
     string GetOperatorImage(OperatorConfig config);
+
+    /// <summary>
+    /// Builds RBAC resources from embedded manifests without applying them.
+    /// </summary>
+    List<IKubernetesObject<V1ObjectMeta>> BuildRbacResources(string targetNamespace);
+
+    /// <summary>
+    /// Builds operator deployment resources from embedded manifests without applying them.
+    /// </summary>
+    List<IKubernetesObject<V1ObjectMeta>> BuildOperatorDeploymentResources(OperatorConfig config);
+
+    /// <summary>
+    /// Builds CRD resources from embedded manifests without applying them.
+    /// </summary>
+    List<JsonObject> BuildCrdManifests();
 }
 
 /// <summary>
@@ -157,6 +173,131 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
     public string GetOperatorImage(OperatorConfig config)
     {
         return ProvisioningCommonTools.ResolveImage(config, operatorImage);
+    }
+
+    /// <inheritdoc />
+    public List<IKubernetesObject<V1ObjectMeta>> BuildRbacResources(string targetNamespace)
+    {
+        var results = new List<IKubernetesObject<V1ObjectMeta>>();
+        foreach (var (fileName, yaml) in ProvisioningCommonTools.GetYamlDocuments(
+                     PulumiOperatorManifestsResourceRoot,
+                     PulumiOperatorManifestsRelativePath,
+                     "rbac"))
+        {
+            foreach (var jsonObj in yamlToJsonConverter.ConvertAll(yaml))
+            {
+                var kind = jsonObj.GetRequiredString("kind");
+                var rbacName = EnsurePrefixed(jsonObj.GetRequiredString("metadata.name"));
+                jsonObj.Set("metadata.name", rbacName);
+
+                KubernetesManifestTools.NormalizeMetadataMaps(jsonObj);
+                ProvisioningCommonTools.ApplyOperatorLabels(
+                    jsonObj,
+                    "metadata",
+                    DataPlaneConstants.PulumiOperatorAppLabelValue,
+                    operatorVersion);
+
+                if (kind is "ServiceAccount" or "Role" or "RoleBinding")
+                    jsonObj.Set("metadata.namespace", targetNamespace);
+
+                if (kind is "RoleBinding" or "ClusterRoleBinding")
+                {
+                    if (jsonObj["subjects"] is JsonArray subjects)
+                    {
+                        for (int i = 0; i < subjects.Count; i++)
+                        {
+                            if (jsonObj.TryGetString($"subjects[{i}].name", out var subjectName))
+                                jsonObj.Set($"subjects[{i}].name", EnsurePrefixed(subjectName));
+                            jsonObj.Set($"subjects[{i}].namespace", targetNamespace);
+                        }
+                    }
+                }
+
+                if (kind is "RoleBinding" or "ClusterRoleBinding")
+                {
+                    if (jsonObj.TryGetString("roleRef.name", out var roleRefName))
+                        jsonObj.Set("roleRef.name", EnsurePrefixed(roleRefName));
+                }
+
+                if (kind is "Role" or "ClusterRole")
+                    NormalizeServiceAccountResourceNames(jsonObj);
+
+                var kubeObj = KubernetesManifestTools.DeserializeByKind(jsonObj.ToJsonString(), kind);
+                results.Add(kubeObj);
+            }
+        }
+        return results;
+    }
+
+    /// <inheritdoc />
+    public List<IKubernetesObject<V1ObjectMeta>> BuildOperatorDeploymentResources(OperatorConfig config)
+    {
+        var results = new List<IKubernetesObject<V1ObjectMeta>>();
+        var yaml = ProvisioningCommonTools.GetYamlDocument(
+            PulumiOperatorManifestsResourceRoot,
+            PulumiOperatorManifestsRelativePath,
+            "manager/manager.yaml");
+
+        foreach (var jsonObj in yamlToJsonConverter.ConvertAll(yaml))
+        {
+            var kind = jsonObj.GetRequiredString("kind");
+            var name = EnsurePrefixed(jsonObj.GetRequiredString("metadata.name"));
+            jsonObj.Set("metadata.name", name);
+            var targetNamespace = config.Kubernetes.Namespaces.System.Name;
+
+            if (kind == "Namespace")
+                continue;
+
+            KubernetesManifestTools.NormalizeMetadataMaps(jsonObj);
+            ProvisioningCommonTools.ApplyOperatorLabels(
+                jsonObj,
+                "metadata",
+                DataPlaneConstants.PulumiOperatorAppLabelValue,
+                operatorVersion);
+
+            if (kind is "Deployment")
+            {
+                ProvisioningCommonTools.ApplyOperatorLabels(
+                    jsonObj,
+                    "spec.template.metadata",
+                    DataPlaneConstants.PulumiOperatorAppLabelValue,
+                    operatorVersion);
+                ApplyDeploymentPodSpecDefaults(jsonObj, targetNamespace, config);
+                ApplyDeploymentSecurityContext(jsonObj, config.Kubernetes.SecurityContextRunAsId);
+                ProvisioningCommonTools.ApplyServiceAccountAttachments(jsonObj);
+                jsonObj.Set("spec.template.spec.containers[0].image", GetOperatorImage(config));
+            }
+            else if (kind is "Service")
+            {
+                jsonObj.Set("metadata.name", name);
+                jsonObj.Set("metadata.namespace", targetNamespace);
+            }
+            else
+            {
+                continue;
+            }
+
+            var kubeObj = KubernetesManifestTools.DeserializeByKind(jsonObj.ToJsonString(), kind);
+            results.Add(kubeObj);
+        }
+        return results;
+    }
+
+    /// <inheritdoc />
+    public List<JsonObject> BuildCrdManifests()
+    {
+        var results = new List<JsonObject>();
+        foreach (var (fileName, yaml) in ProvisioningCommonTools.GetYamlDocuments(
+                     PulumiOperatorManifestsResourceRoot,
+                     PulumiOperatorManifestsRelativePath,
+                     "crd"))
+        {
+            foreach (var jsonObj in yamlToJsonConverter.ConvertAll(yaml))
+            {
+                results.Add(jsonObj);
+            }
+        }
+        return results;
     }
 
     private async Task ApplyCrdManifestsInternalAsync(IKubernetesClient client)

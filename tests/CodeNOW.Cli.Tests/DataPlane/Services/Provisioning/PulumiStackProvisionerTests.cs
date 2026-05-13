@@ -238,6 +238,9 @@ public class PulumiStackProvisionerTests
         public Task WaitForOperatorReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout) => Task.CompletedTask;
         public Task CreateDataPlaneConfigSecretAsync(IKubernetesClient client, OperatorConfig config) => Task.CompletedTask;
         public string GetOperatorImage(OperatorConfig config) => "operator-image";
+        public List<k8s.IKubernetesObject<V1ObjectMeta>> BuildRbacResources(string targetNamespace) => [];
+        public List<k8s.IKubernetesObject<V1ObjectMeta>> BuildOperatorDeploymentResources(OperatorConfig config) => [];
+        public List<System.Text.Json.Nodes.JsonObject> BuildCrdManifests() => [];
     }
 
     private sealed class FakeOperatorInfoProvider : IPulumiOperatorInfoProvider

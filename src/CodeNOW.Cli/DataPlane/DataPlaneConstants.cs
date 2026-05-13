@@ -158,6 +158,21 @@ public static class DataPlaneConstants
         "app.kubernetes.io/name=" + BootstrapAppLabelValue + ",app.kubernetes.io/part-of=" + PartOfDataPlaneLabelValue;
 
     /// <summary>
+    /// Default system namespace name.
+    /// </summary>
+    public const string DefaultSystemNamespace = "cn-data-plane-system";
+
+    /// <summary>
+    /// Default CNI namespace name.
+    /// </summary>
+    public const string DefaultCniNamespace = "cn-data-plane-cni";
+
+    /// <summary>
+    /// Default CI Pipelines namespace name.
+    /// </summary>
+    public const string DefaultCiPipelinesNamespace = "cn-data-plane-ci-pipelines";
+
+    /// <summary>
     /// Default service account name used by the data plane.
     /// </summary>
     public const string ServiceAccountName = "cn-data-plane";

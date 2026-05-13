@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json.Nodes;
 using CodeNOW.Cli.Adapters.Kubernetes;
 using CodeNOW.Cli.DataPlane.Models;
+using k8s;
 using k8s.Models;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,15 @@ namespace CodeNOW.Cli.DataPlane.Services.Provisioning;
 /// </summary>
 public interface IPulumiStackProvisioner
 {
+    /// <summary>
+    /// Builds all RBAC resources for the Pulumi stack without applying them.
+    /// </summary>
+    List<IKubernetesObject<V1ObjectMeta>> BuildPulumiStackRbacResources(
+        string namespaceName,
+        string serviceAccountName,
+        OperatorConfig config,
+        IEnumerable<string> targetNamespaces);
+
     /// <summary>
     /// Applies RBAC required by the Pulumi stack.
     /// </summary>
@@ -40,6 +50,12 @@ public interface IPulumiStackProvisioner
     /// <param name="client">Kubernetes client used to apply resources.</param>
     /// <param name="config">Operator configuration settings.</param>
     Task CreatePulumiStatePvcAsync(IKubernetesClient client, OperatorConfig config);
+
+    /// <summary>
+    /// Builds the Pulumi state PVC resource without applying it.
+    /// </summary>
+    /// <param name="config">Operator configuration settings.</param>
+    V1PersistentVolumeClaim BuildPulumiStatePvcResource(OperatorConfig config);
 }
 
 /// <summary>
@@ -61,17 +77,16 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
         this.manifestBuilder = manifestBuilder;
     }
 
-    /// <inheritdoc />
-    public async Task ApplyPulumiStackRbacAsync(
-        IKubernetesClient client,
+    /// <summary>
+    /// Builds all RBAC resources for the Pulumi stack without applying them.
+    /// </summary>
+    public List<IKubernetesObject<V1ObjectMeta>> BuildPulumiStackRbacResources(
         string namespaceName,
         string serviceAccountName,
         OperatorConfig config,
         IEnumerable<string> targetNamespaces)
     {
-        logger.LogInformation(
-            "Applying Pulumi stack RBAC in namespace {ns} ...",
-            namespaceName);
+        var resources = new List<IKubernetesObject<V1ObjectMeta>>();
 
         var clusterRoleBindingName = $"{namespaceName}:{serviceAccountName}:system:auth-delegator";
         var stackClusterRoleAdmin = serviceAccountName + "-admin";
@@ -96,6 +111,7 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
             }
         };
         manifestBuilder.ApplyStackLabels(serviceAccount.Metadata);
+        resources.Add(serviceAccount);
 
         var clusterRoleBinding = new V1ClusterRoleBinding
         {
@@ -120,6 +136,7 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
             ]
         };
         manifestBuilder.ApplyStackLabels(clusterRoleBinding.Metadata);
+        resources.Add(clusterRoleBinding);
 
         var stackClusterRole = new V1ClusterRole
         {
@@ -204,6 +221,7 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
             ]
         };
         manifestBuilder.ApplyStackLabels(stackClusterRole.Metadata);
+        resources.Add(stackClusterRole);
 
         var stackClusterRoleBinding = new V1ClusterRoleBinding
         {
@@ -228,6 +246,7 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
             ]
         };
         manifestBuilder.ApplyStackLabels(stackClusterRoleBinding.Metadata);
+        resources.Add(stackClusterRoleBinding);
 
         var readerRoleSuffix = "-reader";
         var kubeSystemRole = new V1Role
@@ -253,6 +272,7 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
             ]
         };
         manifestBuilder.ApplyStackLabels(kubeSystemRole.Metadata);
+        resources.Add(kubeSystemRole);
 
         var kubeSystemRoleBinding = new V1RoleBinding
         {
@@ -278,13 +298,7 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
             ]
         };
         manifestBuilder.ApplyStackLabels(kubeSystemRoleBinding.Metadata);
-
-        await client.ApplyAsync(serviceAccount);
-        await client.ApplyAsync(clusterRoleBinding);
-        await client.ApplyAsync(stackClusterRole);
-        await client.ApplyAsync(stackClusterRoleBinding);
-        await client.ApplyAsync(kubeSystemRole);
-        await client.ApplyAsync(kubeSystemRoleBinding);
+        resources.Add(kubeSystemRoleBinding);
 
         var adminRoleSuffix = "-admin";
         foreach (var targetNamespace in targetNamespaces)
@@ -307,6 +321,7 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
                 ]
             };
             manifestBuilder.ApplyStackLabels(namespaceRole.Metadata);
+            resources.Add(namespaceRole);
 
             var namespaceRoleBinding = new V1RoleBinding
             {
@@ -332,10 +347,28 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
                 ]
             };
             manifestBuilder.ApplyStackLabels(namespaceRoleBinding.Metadata);
-
-            await client.ApplyAsync(namespaceRole);
-            await client.ApplyAsync(namespaceRoleBinding);
+            resources.Add(namespaceRoleBinding);
         }
+
+        return resources;
+    }
+
+    /// <inheritdoc />
+    public async Task ApplyPulumiStackRbacAsync(
+        IKubernetesClient client,
+        string namespaceName,
+        string serviceAccountName,
+        OperatorConfig config,
+        IEnumerable<string> targetNamespaces)
+    {
+        logger.LogInformation(
+            "Applying Pulumi stack RBAC in namespace {ns} ...",
+            namespaceName);
+
+        var resources = BuildPulumiStackRbacResources(namespaceName, serviceAccountName, config, targetNamespaces);
+
+        foreach (var resource in resources)
+            await client.ApplyAsync(resource);
 
         logger.LogInformation(
             "Pulumi stack RBAC applied in namespace {ns}.",
@@ -422,6 +455,12 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
                 pvc,
                 config.Kubernetes.Namespaces.System.Name);
         }
+    }
+
+    /// <inheritdoc />
+    public V1PersistentVolumeClaim BuildPulumiStatePvcResource(OperatorConfig config)
+    {
+        return manifestBuilder.BuildPulumiStatePvc(config);
     }
 
 }

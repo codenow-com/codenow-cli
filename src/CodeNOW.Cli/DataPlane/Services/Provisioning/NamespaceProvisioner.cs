@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using CodeNOW.Cli.Adapters.Kubernetes;
 using CodeNOW.Cli.DataPlane.Models;
+using k8s;
 using k8s.Models;
 using Microsoft.Extensions.Logging;
 
@@ -27,6 +28,13 @@ public interface INamespaceProvisioner
     /// <param name="config">Operator configuration containing namespace settings.</param>
     /// <returns>Tasks for each namespace provisioning step.</returns>
     NamespaceProvisioningTasks StartNamespaceProvisioning(IKubernetesClient client, OperatorConfig config);
+
+    /// <summary>
+    /// Builds namespace and image pull secret resources without applying them.
+    /// </summary>
+    /// <param name="config">Operator configuration containing namespace settings.</param>
+    /// <returns>List of namespace and secret resources that would be created.</returns>
+    List<IKubernetesObject<V1ObjectMeta>> BuildNamespaceResources(OperatorConfig config);
 }
 
 /// <summary>
@@ -93,6 +101,33 @@ internal sealed class NamespaceProvisioner : INamespaceProvisioner
                 : Task.CompletedTask;
 
         return new NamespaceProvisioningTasks(systemNamespaceTask, cniNamespaceTask, ciPipelinesNamespaceTask);
+    }
+
+    /// <inheritdoc />
+    public List<IKubernetesObject<V1ObjectMeta>> BuildNamespaceResources(OperatorConfig config)
+    {
+        var resources = new List<IKubernetesObject<V1ObjectMeta>>();
+        var namespaces = new HashSet<string>(StringComparer.Ordinal)
+        {
+            config.Kubernetes.Namespaces.System.Name,
+            config.Kubernetes.Namespaces.Cni.Name,
+            config.Kubernetes.Namespaces.CiPipelines.Name
+        };
+
+        foreach (var ns in namespaces)
+        {
+            resources.Add(new V1Namespace { Metadata = new V1ObjectMeta { Name = ns } });
+            resources.Add(new V1Secret
+            {
+                Metadata = new V1ObjectMeta
+                {
+                    Name = KubernetesConstants.SystemImagePullSecret,
+                    NamespaceProperty = ns
+                }
+            });
+        }
+
+        return resources;
     }
 
     /// <summary>

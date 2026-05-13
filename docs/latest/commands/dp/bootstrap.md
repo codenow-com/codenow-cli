@@ -24,6 +24,7 @@ The diagram illustrates the bootstrap lifecycle triggered by `dp bootstrap`:
     - [Interactive Selection](#interactive-selection)
     - [Command Line](#command-line)
 - [Bootstrap Execution](#bootstrap-execution)
+  - [Minimum RBAC Permissions](#minimum-rbac-permissions)
 
 ## Usage
 
@@ -38,6 +39,7 @@ Additional flags:
 - `--fluxcd-enable`: Enable installation of FluxCD components (currently installs only the [Source Controller](https://fluxcd.io/flux/components/source/)). Applies only when generating a new config.
 - `--fluxcd-skip-crds`: Skip FluxCD CRD installation when FluxCD is enabled. Applies only when generating a new config.
 - `--pulumi-skip-crds`: Skip Pulumi operator CRD installation. Applies only when generating a new config.
+- `--show-permissions-only`: Print the minimum ClusterRole permissions required to run the bootstrap and exit without performing any changes.
 
 > FluxCD is required to correctly load Git configuration from Azure DevOps Server.
 > It also enables advanced Git capabilities such as multiple branches, excluding
@@ -265,3 +267,13 @@ phase, the bootstrap process:
 
 You can monitor component status in the
 [dashboard command](dashboard.md).
+
+### Minimum RBAC Permissions
+
+The following ClusterRole contains the minimum permissions required to run `cn dp bootstrap`. (assuming target namespaces: cn-data-plane-system, cn-data-plane-cni, cn-data-plane-ci-pipelines )
+You can generate it yourself by running `cn dp bootstrap --show-permissions-only`.
+
+```yaml
+--8<-- "docs/latest/assets/bootstrap-clusterrole.yaml"
+```
+

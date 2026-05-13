@@ -3,6 +3,8 @@ using CodeNOW.Cli.Adapters.Kubernetes;
 using CodeNOW.Cli.DataPlane;
 using CodeNOW.Cli.DataPlane.Models;
 using CodeNOW.Cli.DataPlane.Services.Provisioning;
+using k8s;
+using k8s.Models;
 using Xunit;
 
 namespace CodeNOW.Cli.Tests.DataPlane.Services.Provisioning;
@@ -215,6 +217,9 @@ public class PulumiStackManifestBuilderTests
         public Task WaitForOperatorReadyAsync(IKubernetesClient client, string namespaceName, TimeSpan timeout) => Task.CompletedTask;
         public Task CreateDataPlaneConfigSecretAsync(IKubernetesClient client, OperatorConfig config) => Task.CompletedTask;
         public string GetOperatorImage(OperatorConfig config) => "operator-image";
+        public List<IKubernetesObject<V1ObjectMeta>> BuildRbacResources(string targetNamespace) => [];
+        public List<IKubernetesObject<V1ObjectMeta>> BuildOperatorDeploymentResources(OperatorConfig config) => [];
+        public List<JsonObject> BuildCrdManifests() => [];
     }
 
     private sealed class FakeOperatorInfoProvider : IPulumiOperatorInfoProvider
