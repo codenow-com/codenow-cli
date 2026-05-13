@@ -33,6 +33,10 @@ theme:
   icon:
     logo: material/console
 
+markdown_extensions:
+  - pymdownx.snippets:
+      base_path: ["."]
+
 nav:
   - Home: index.md
   - Install: install.md
