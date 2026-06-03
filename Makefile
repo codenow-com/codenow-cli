@@ -1,7 +1,5 @@
 PROJECT = src/CodeNOW.Cli/CodeNOW.Cli.csproj
 PULUMI_OPERATOR_VERSION = v2.7.0
-PULUMI_RUNTIME_VERSION = 3.216.0-nonroot
-PULUMI_PLUGINS_VERSION = 1.0.2
 FLUXCD_VERSION = v2.7.5
 FLUXCD_SOURCE_CONTROLLER_VERSION = v1.7.4
 PULUMI_OPERATOR_MANIFESTS_TARGET_DIR := ./assets/vendor/generated/dataplane/pulumi-operator
@@ -12,8 +10,6 @@ PULUMI_OPERATOR_MANIFESTS_SOURCE_DIRS := manager crd/bases rbac
 PULUMI_OPERATOR_INFO_FILE := $(PULUMI_OPERATOR_MANIFESTS_TARGET_DIR)/pulumi-operator-info.json
 FLUXCD_INFO_FILE := $(FLUXCD_MANIFESTS_TARGET_DIR)/fluxcd-info.json
 PULUMI_OPERATOR_IMAGE := pulumi/pulumi-kubernetes-operator
-PULUMI_RUNTIME_IMAGE := pulumi/pulumi
-PULUMI_PLUGINS_IMAGE := codenow/pulumi-operator-plugins
 FLUXCD_SOURCE_CONTROLLER_IMAGE := fluxcd/source-controller
 
 define download_pulumi_operator_manifests
@@ -59,12 +55,13 @@ update-pulumi-operator:
 		$(call download_pulumi_operator_manifests,$$dir); \
 	done
 	@mkdir -p $(PULUMI_OPERATOR_MANIFESTS_TARGET_DIR)
-	@echo "📄 Writing operator metadata to $(PULUMI_OPERATOR_INFO_FILE)"
-	@printf '{ "operator": { "image": "%s", "version": "%s" }, "runtime": { "image": "%s", "version": "%s" }, "plugins": { "image": "%s", "version": "%s" } }\n' \
-		"$(PULUMI_OPERATOR_IMAGE)" "$(PULUMI_OPERATOR_VERSION)" \
-		"$(PULUMI_RUNTIME_IMAGE)" "$(PULUMI_RUNTIME_VERSION)" \
-		"$(PULUMI_PLUGINS_IMAGE)" "$(PULUMI_PLUGINS_VERSION)" \
-		> $(PULUMI_OPERATOR_INFO_FILE)
+	@echo "📄 Updating operator metadata in $(PULUMI_OPERATOR_INFO_FILE)"
+	@tmp=$$(mktemp); \
+		jq --arg image "$(PULUMI_OPERATOR_IMAGE)" \
+		   --arg version "$(PULUMI_OPERATOR_VERSION)" \
+		   '.operator.image = $$image | .operator.version = $$version' \
+		   "$(PULUMI_OPERATOR_INFO_FILE)" > $$tmp; \
+		mv $$tmp "$(PULUMI_OPERATOR_INFO_FILE)"
 
 update-fluxcd:
 	@tmp=$$(mktemp -d); \
