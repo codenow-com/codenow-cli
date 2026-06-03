@@ -1,1 +1,14 @@
-{ "operator": { "image": "pulumi/pulumi-kubernetes-operator", "version": "v2.7.0" }, "runtime": { "image": "codenow-com/pulumi-nodejs", "version": "0.0.0" }, "plugins": { "image": "codenow/pulumi-operator-plugins", "version": "1.0.2" } }
+{
+  "operator": {
+    "image": "pulumi/pulumi-kubernetes-operator",
+    "version": "v2.7.0"
+  },
+  "runtime": {
+    "image": "codenow-com/pulumi-nodejs",
+    "version": "1.0.0"
+  },
+  "plugins": {
+    "image": "codenow/pulumi-operator-plugins",
+    "version": "1.0.2"
+  }
+}
