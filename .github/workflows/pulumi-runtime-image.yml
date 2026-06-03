@@ -1,0 +1,156 @@
+name: Pulumi Runtime Image Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (semver, without 'v')"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: pulumi-runtime-image-release
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: codenow-com
+  IMAGE_NAME: pulumi-nodejs
+  DOCKERFILE: images/pulumi-runtime/Dockerfile
+  CONTEXT: images/pulumi-runtime
+  OPERATOR_INFO_FILE: assets/vendor/generated/dataplane/pulumi-operator/pulumi-operator-info.json
+  TAG_PREFIX: pulumi-runtime/v
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve image version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format. Use MAJOR.MINOR.PATCH"
+            exit 1
+          fi
+
+          version="${{ inputs.version }}"
+          git_tag="${TAG_PREFIX}${version}"
+          image="${REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE_NAME}:${version}"
+
+          if git rev-parse "${git_tag}" >/dev/null 2>&1; then
+            echo "Tag ${git_tag} already exists."
+            exit 1
+          fi
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "git_tag=${git_tag}" >> "${GITHUB_OUTPUT}"
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          echo "created=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> "${GITHUB_OUTPUT}"
+
+      - name: Resolve base image
+        id: base-image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source_image="$(awk -F= '/^ARG SOURCE_IMAGE=/{print $2; exit}' "${DOCKERFILE}")"
+          source_image_version="$(awk -F= '/^ARG SOURCE_IMAGE_VERSION=/{print $2; exit}' "${DOCKERFILE}")"
+
+          if [[ -z "${source_image}" || -z "${source_image_version}" ]]; then
+            echo "Could not resolve SOURCE_IMAGE or SOURCE_IMAGE_VERSION from ${DOCKERFILE}."
+            exit 1
+          fi
+
+          echo "source_image=${source_image}" >> "${GITHUB_OUTPUT}"
+          echo "source_image_version=${source_image_version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ env.CONTEXT }}
+          file: ${{ env.DOCKERFILE }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.version.outputs.image }}
+          build-args: |
+            SOURCE_IMAGE=${{ steps.base-image.outputs.source_image }}
+            SOURCE_IMAGE_VERSION=${{ steps.base-image.outputs.source_image_version }}
+          labels: |
+            org.opencontainers.image.base.name=${{ steps.base-image.outputs.source_image }}:${{ steps.base-image.outputs.source_image_version }}
+            org.opencontainers.image.created=${{ steps.version.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
+            org.opencontainers.image.vendor=CodeNOW s.r.o., https://www.codenow.com/
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Update operator info runtime image version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tmp="$(mktemp)"
+          jq --arg version "${{ steps.version.outputs.version }}" \
+            '.runtime.version = $version' \
+            "${OPERATOR_INFO_FILE}" > "${tmp}"
+          mv "${tmp}" "${OPERATOR_INFO_FILE}"
+
+          if git diff --quiet -- "${OPERATOR_INFO_FILE}"; then
+            echo "${OPERATOR_INFO_FILE} already contains runtime version ${{ steps.version.outputs.version }}."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add "${OPERATOR_INFO_FILE}"
+          git commit -m "build: update Pulumi runtime image version to ${{ steps.version.outputs.version }}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Create image release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "${{ steps.version.outputs.git_tag }}" \
+            -m "Release Pulumi runtime image ${{ steps.version.outputs.version }}"
+          git push origin "${{ steps.version.outputs.git_tag }}"
+
+      - name: Summary
+        run: |
+          {
+            echo "## Pulumi runtime image"
+            echo ""
+            echo "- Git tag: \`${{ steps.version.outputs.git_tag }}\`"
+            echo "- Image: \`${{ steps.version.outputs.image }}\`"
+            echo "- Base image: \`${{ steps.base-image.outputs.source_image }}:${{ steps.base-image.outputs.source_image_version }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
