@@ -8,7 +8,7 @@
     "version": "1.0.0"
   },
   "plugins": {
-    "image": "codenow/pulumi-operator-plugins",
+    "image": "codenow-com/pulumi-operator-plugins",
     "version": "1.0.2"
   }
 }
