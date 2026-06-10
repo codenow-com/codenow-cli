@@ -202,6 +202,94 @@ public class PulumiStackManifestBuilderTests
         Assert.Contains(mounts, mount => mount?["mountPath"]?.GetValue<string>() == PulumiStackManifestBuilder.PulumiHomePath);
     }
 
+    [Fact]
+    public void BuildStack_DisablesCheckpointBackupsByDefault()
+    {
+        var builder = BuildBuilder();
+        var config = new OperatorConfig
+        {
+            Kubernetes = { Namespaces = { System = { Name = "system" } } }
+        };
+
+        var stack = builder.BuildStack(config, "sa");
+        var envRefs = stack["spec"]!.AsObject()["envRefs"]!.AsObject();
+
+        var backupsOff = envRefs["PULUMI_DIY_BACKEND_DISABLE_CHECKPOINT_BACKUPS"]!.AsObject();
+        Assert.Equal("Literal", backupsOff["type"]!.GetValue<string>());
+        Assert.Equal("true", backupsOff["literal"]!.AsObject()["value"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void BuildStack_AddsHistoryPruneInitContainer_WhenS3Disabled()
+    {
+        var builder = BuildBuilder();
+        var config = new OperatorConfig
+        {
+            Kubernetes = { Namespaces = { System = { Name = "system" } } }
+        };
+
+        var stack = builder.BuildStack(config, "sa");
+        var workspaceSpec = stack["spec"]!.AsObject()["workspaceTemplate"]!.AsObject()["spec"]!.AsObject();
+        var prune = GetInitContainers(stack)
+            .First(node => node?["name"]?.GetValue<string>() == "prune-history")!.AsObject();
+
+        // Reuses the pulumi runtime image rather than pulling a separate one.
+        Assert.Equal(workspaceSpec["image"]!.GetValue<string>(), prune["image"]!.GetValue<string>());
+
+        var security = prune["securityContext"]!.AsObject();
+        Assert.True(security["readOnlyRootFilesystem"]!.GetValue<bool>());
+        Assert.False(security["allowPrivilegeEscalation"]!.GetValue<bool>());
+
+        // Only the history subdirectory is mounted, via subPath.
+        var mount = prune["volumeMounts"]!.AsArray()
+            .First(node => node?["name"]?.GetValue<string>() == "pulumi-state")!.AsObject();
+        Assert.Equal("/history", mount["mountPath"]!.GetValue<string>());
+        Assert.Equal(".pulumi/history", mount["subPath"]!.GetValue<string>());
+
+        var command = prune["command"]!.AsArray();
+        Assert.Equal("sh", command[0]!.GetValue<string>());
+        Assert.Equal("-c", command[1]!.GetValue<string>());
+
+        var script = command[2]!.GetValue<string>();
+        // Keeps the newest N entries (tail starts at N+1).
+        Assert.Contains($"tail -n +{DataPlaneConstants.PulumiStateHistoryRetainCount + 1}", script);
+        // Removes both the .json files and their .attrs sidecars for each pruned entry.
+        Assert.Contains(".history.json", script);
+        Assert.Contains(".history.json.attrs", script);
+        Assert.Contains(".checkpoint.json", script);
+        Assert.Contains(".checkpoint.json.attrs", script);
+    }
+
+    [Fact]
+    public void BuildStack_OmitsHistoryPruneInitContainer_WhenS3Enabled()
+    {
+        var builder = BuildBuilder();
+        var config = new OperatorConfig
+        {
+            Kubernetes = { Namespaces = { System = { Name = "system" } } },
+            S3 =
+            {
+                Enabled = true,
+                AuthenticationMethod = S3AuthenticationMethod.AccessKeySecretKey,
+                Url = "https://s3.example.com",
+                Bucket = "bucket",
+                Region = "us-east-1",
+                AccessKey = "access",
+                SecretKey = "secret"
+            }
+        };
+
+        var stack = builder.BuildStack(config, "sa");
+
+        Assert.DoesNotContain(
+            GetInitContainers(stack),
+            node => node?["name"]?.GetValue<string>() == "prune-history");
+    }
+
+    private static JsonArray GetInitContainers(JsonObject stack) =>
+        stack["spec"]!.AsObject()["workspaceTemplate"]!.AsObject()["spec"]!.AsObject()
+            ["podTemplate"]!.AsObject()["spec"]!.AsObject()["initContainers"]!.AsArray();
+
     private static PulumiStackManifestBuilder BuildBuilder()
     {
         var operatorProvisioner = new FakePulumiOperatorProvisioner();

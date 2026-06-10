@@ -191,6 +191,13 @@ public static class DataPlaneConstants
     /// </summary>
     public const string PulumiStatePvcName = "cn-data-plane-state";
 
+    /// <summary>
+    /// Number of most recent Pulumi DIY state history entries to retain on the state PVC.
+    /// Older entries are pruned by an init container on each reconcile. Applies only to
+    /// PVC-backed state; S3-backed state is managed via bucket lifecycle policies.
+    /// </summary>
+    public const int PulumiStateHistoryRetainCount = 5;
+
 
     /// <summary>
     /// App name label value applied to bootstrap-generated data plane resources.
