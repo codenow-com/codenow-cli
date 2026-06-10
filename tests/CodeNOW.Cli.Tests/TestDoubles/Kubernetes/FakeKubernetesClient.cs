@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 using CodeNOW.Cli.Adapters.Kubernetes;
 using k8s.Models;
 using k8s;
@@ -114,6 +115,10 @@ public sealed class FakeAppsV1Client : IKubernetesAppsClient
 
 public sealed class FakeCustomObjectsClient : IKubernetesCustomObjectsClient
 {
+    public Func<string, string, string, string, CancellationToken, Task<object>>?
+        ListNamespacedCustomObjectAsyncHandler
+    { get; set; }
+
     public Func<string, string, string, string, string, CancellationToken, Task<object>>?
         GetNamespacedCustomObjectAsyncHandler
     { get; set; }
@@ -121,6 +126,23 @@ public sealed class FakeCustomObjectsClient : IKubernetesCustomObjectsClient
     public Func<V1Patch, string, string, string, string, string, CancellationToken, string?, bool?, Task>?
         PatchNamespacedCustomObjectAsyncHandler
     { get; set; }
+
+    public Func<string, string, string, string, string, CancellationToken, Task>?
+        DeleteNamespacedCustomObjectAsyncHandler
+    { get; set; }
+
+    public Task<object> ListNamespacedCustomObjectAsync(
+        string group,
+        string version,
+        string namespaceParameter,
+        string plural,
+        CancellationToken cancellationToken = default)
+        => ListNamespacedCustomObjectAsyncHandler?.Invoke(
+            group, version, namespaceParameter, plural, cancellationToken)
+            ?? Task.FromResult<object>(new JsonObject
+            {
+                ["items"] = new JsonArray()
+            });
 
     public Task<object> GetNamespacedCustomObjectAsync(
         string group,
@@ -145,6 +167,17 @@ public sealed class FakeCustomObjectsClient : IKubernetesCustomObjectsClient
         bool? force = null)
         => PatchNamespacedCustomObjectAsyncHandler?.Invoke(
             patch, group, version, namespaceParameter, plural, name, cancellationToken, fieldManager, force)
+            ?? Task.CompletedTask;
+
+    public Task DeleteNamespacedCustomObjectAsync(
+        string group,
+        string version,
+        string namespaceParameter,
+        string plural,
+        string name,
+        CancellationToken cancellationToken = default)
+        => DeleteNamespacedCustomObjectAsyncHandler?.Invoke(
+            group, version, namespaceParameter, plural, name, cancellationToken)
             ?? Task.CompletedTask;
 }
 

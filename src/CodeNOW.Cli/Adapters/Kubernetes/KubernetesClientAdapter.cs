@@ -150,6 +150,19 @@ public sealed class KubernetesClientAdapter : IKubernetesClient
             this.client = client;
         }
 
+        public Task<object> ListNamespacedCustomObjectAsync(
+            string group,
+            string version,
+            string namespaceParameter,
+            string plural,
+            CancellationToken cancellationToken = default)
+            => client.CustomObjects.ListNamespacedCustomObjectAsync(
+                group,
+                version,
+                namespaceParameter,
+                plural,
+                cancellationToken: cancellationToken);
+
         public Task<object> GetNamespacedCustomObjectAsync(
             string group,
             string version,
@@ -184,6 +197,22 @@ public sealed class KubernetesClientAdapter : IKubernetesClient
                 name,
                 fieldManager: fieldManager,
                 force: force,
+                cancellationToken: cancellationToken);
+
+        public Task DeleteNamespacedCustomObjectAsync(
+            string group,
+            string version,
+            string namespaceParameter,
+            string plural,
+            string name,
+            CancellationToken cancellationToken = default)
+            => client.CustomObjects.DeleteNamespacedCustomObjectAsync(
+                group,
+                version,
+                namespaceParameter,
+                plural,
+                name,
+                new V1DeleteOptions(),
                 cancellationToken: cancellationToken);
     }
 

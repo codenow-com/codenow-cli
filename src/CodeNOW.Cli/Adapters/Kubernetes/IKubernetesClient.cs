@@ -56,6 +56,13 @@ public interface IKubernetesAppsClient
 /// </summary>
 public interface IKubernetesCustomObjectsClient
 {
+    Task<object> ListNamespacedCustomObjectAsync(
+        string group,
+        string version,
+        string namespaceParameter,
+        string plural,
+        CancellationToken cancellationToken = default);
+
     Task<object> GetNamespacedCustomObjectAsync(
         string group,
         string version,
@@ -74,6 +81,14 @@ public interface IKubernetesCustomObjectsClient
         CancellationToken cancellationToken = default,
         string? fieldManager = null,
         bool? force = null);
+
+    Task DeleteNamespacedCustomObjectAsync(
+        string group,
+        string version,
+        string namespaceParameter,
+        string plural,
+        string name,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>

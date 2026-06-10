@@ -199,6 +199,7 @@ public class BootstrapServiceTests
                 "namespace.StartNamespaceProvisioning",
                 "operator.ApplyCrdManifestsAsync",
                 "fluxcd.ApplyCrdManifestsAsync",
+                "stack.HasWorkspaceInputsChangedAsync",
                 "operator.CreateDataPlaneConfigSecretAsync",
                 "fluxcd.ApplySourceControllerAsync",
                 "fluxcd.WaitForSourceControllerReadyAsync",
@@ -210,6 +211,50 @@ public class BootstrapServiceTests
                 "stack.ApplyPulumiStackAsync"
             },
             calls);
+    }
+
+    [Fact]
+    public async Task BootstrapAsync_DoesNotDeleteWorkspaceByDefault()
+    {
+        var config = new OperatorConfig();
+        var stackProvisioner = new FakePulumiStackProvisioner();
+        var service = new BootstrapService(
+            new NullLogger<BootstrapService>(),
+            new FakeKubernetesClientFactory(),
+            new KubernetesConnectionOptions(),
+            new FakeNamespaceProvisioner(),
+            new FakeFluxCDProvisioner(),
+            new FakePulumiOperatorProvisioner(),
+            stackProvisioner);
+
+        await service.BootstrapAsync(config);
+
+        Assert.False(stackProvisioner.DeletedWorkspace);
+    }
+
+    [Fact]
+    public async Task BootstrapAsync_DeletesWorkspaceAfterApplyingStackWhenWorkspaceInputsChanged()
+    {
+        var calls = new List<string>();
+        var config = new OperatorConfig();
+        config.Kubernetes.Namespaces.System.Name = "system";
+        config.Kubernetes.Namespaces.Cni.Name = "cni";
+        config.Kubernetes.Namespaces.CiPipelines.Name = "ci";
+
+        var service = new BootstrapService(
+            new NullLogger<BootstrapService>(),
+            new FakeKubernetesClientFactory(),
+            new KubernetesConnectionOptions(),
+            new OrderedNamespaceProvisioner(calls),
+            new OrderedFluxCDProvisioner(calls),
+            new OrderedPulumiOperatorProvisioner(calls),
+            new OrderedPulumiStackProvisioner(calls) { WorkspaceInputsChanged = true });
+
+        await service.BootstrapAsync(config);
+
+        Assert.True(
+            calls.IndexOf("stack.DeletePulumiWorkspaceAsync") >
+            calls.IndexOf("stack.ApplyPulumiStackAsync"));
     }
 
     private sealed class FakeKubernetesClientFactory : IKubernetesClientFactory
@@ -324,6 +369,8 @@ public class BootstrapServiceTests
     private sealed class FakePulumiStackProvisioner : IPulumiStackProvisioner
     {
         public bool AppliedStack { get; private set; }
+        public bool DeletedWorkspace { get; private set; }
+        public bool WorkspaceInputsChanged { get; set; }
 
         public Task ApplyPulumiStackRbacAsync(
             IKubernetesClient client,
@@ -336,6 +383,18 @@ public class BootstrapServiceTests
         public Task ApplyPulumiStackAsync(IKubernetesClient client, string serviceAccountName, OperatorConfig config)
         {
             AppliedStack = true;
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> HasWorkspaceInputsChangedAsync(
+            IKubernetesClient client,
+            string serviceAccountName,
+            OperatorConfig config)
+            => Task.FromResult(WorkspaceInputsChanged);
+
+        public Task DeletePulumiWorkspaceAsync(IKubernetesClient client, OperatorConfig config)
+        {
+            DeletedWorkspace = true;
             return Task.CompletedTask;
         }
 
@@ -479,6 +538,7 @@ public class BootstrapServiceTests
     private sealed class OrderedPulumiStackProvisioner : IPulumiStackProvisioner
     {
         private readonly List<string> calls;
+        public bool WorkspaceInputsChanged { get; set; }
 
         public OrderedPulumiStackProvisioner(List<string> calls)
         {
@@ -499,6 +559,21 @@ public class BootstrapServiceTests
         public Task ApplyPulumiStackAsync(IKubernetesClient client, string serviceAccountName, OperatorConfig config)
         {
             calls.Add("stack.ApplyPulumiStackAsync");
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> HasWorkspaceInputsChangedAsync(
+            IKubernetesClient client,
+            string serviceAccountName,
+            OperatorConfig config)
+        {
+            calls.Add("stack.HasWorkspaceInputsChangedAsync");
+            return Task.FromResult(WorkspaceInputsChanged);
+        }
+
+        public Task DeletePulumiWorkspaceAsync(IKubernetesClient client, OperatorConfig config)
+        {
+            calls.Add("stack.DeletePulumiWorkspaceAsync");
             return Task.CompletedTask;
         }
 

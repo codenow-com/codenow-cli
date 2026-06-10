@@ -128,7 +128,7 @@ public static class BootstrapManifestPrinter
         {
             ApiGroups = [""],
             Resources = ["pods/exec"],
-            ResourceNames = [DataPlaneConstants.StackName + "-workspace-0"],
+            ResourceNames = [DataPlaneConstants.WorkspaceName + "-0"],
             Verbs = ["*"]
         });
 
