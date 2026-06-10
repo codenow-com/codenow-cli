@@ -107,7 +107,7 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
     {
         var resources = new List<IKubernetesObject<V1ObjectMeta>>();
 
-        var clusterRoleBindingName = $"{namespaceName}:{serviceAccountName}:system:auth-delegator";
+        var clusterRoleBindingName = $"{serviceAccountName}:system:auth-delegator";
         var stackClusterRoleAdmin = serviceAccountName + "-admin";
         Dictionary<string, string>? annotations = null;
         if (config.S3.Enabled
