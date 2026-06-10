@@ -82,6 +82,17 @@ internal sealed class PulumiStackManifestBuilder
                         ["type"] = "Literal"
                     }
                     ,
+                    // Disable DIY backend checkpoint backups (the `backups/` folder / `.bak` files).
+                    // Always on; intentionally not configurable.
+                    ["PULUMI_DIY_BACKEND_DISABLE_CHECKPOINT_BACKUPS"] = new JsonObject
+                    {
+                        ["literal"] = new JsonObject
+                        {
+                            ["value"] = "true"
+                        },
+                        ["type"] = "Literal"
+                    }
+                    ,
                     ["PULUMI_CONFIG_PASSPHRASE"] = new JsonObject
                     {
                         ["type"] = "Secret",
@@ -142,6 +153,11 @@ internal sealed class PulumiStackManifestBuilder
         ConfigureBootstrapContainer(stack, config);
         ConfigureFetchContainer(stack, config);
         ConfigureInstallPluginsContainer(stack, config);
+        // Prune old DIY state history only for PVC-backed state; S3 should use bucket lifecycle policies.
+        if (!config.S3.Enabled)
+        {
+            ConfigureHistoryPruneContainer(stack, config);
+        }
         ApplyWorkspaceInputHash(stack, config);
         ApplyStackLabels(stack);
         ApplySystemLabelsToPath(stack, "spec.workspaceTemplate.spec.podTemplate.metadata");
@@ -629,6 +645,71 @@ internal sealed class PulumiStackManifestBuilder
             {
                 ["name"] = "pulumi",
                 ["mountPath"] = PulumiHomePath
+            });
+    }
+
+    /// <summary>
+    /// Configures an init container that prunes old DIY state history entries on the state PVC,
+    /// retaining only the most recent <see cref="DataPlaneConstants.PulumiStateHistoryRetainCount"/>.
+    /// Only the history subdirectory is mounted (via subPath), so the container cannot touch any
+    /// other state files. Invoked only for PVC-backed state.
+    /// </summary>
+    private void ConfigureHistoryPruneContainer(JsonObject stack, OperatorConfig config)
+    {
+        const string historyMountPath = "/history";
+
+        var podSpec = JsonManifestEditor.EnsureObjectPath(stack, "spec.workspaceTemplate.spec.podTemplate.spec");
+        var initContainers = JsonManifestEditor.EnsureArray(podSpec, "initContainers");
+        var container = JsonManifestEditor.FindByName(initContainers, "prune-history");
+        if (container is null)
+        {
+            container = new JsonObject
+            {
+                ["name"] = "prune-history"
+            };
+            initContainers.Add((JsonNode)container);
+        }
+
+        container["image"] = BuildPulumiImage(config);
+        container["securityContext"] = new JsonObject
+        {
+            ["readOnlyRootFilesystem"] = true,
+            ["allowPrivilegeEscalation"] = false
+        };
+        container["resources"] = new JsonObject
+        {
+            ["limits"] = new JsonObject
+            {
+                ["memory"] = "128Mi",
+                ["cpu"] = "200m"
+            }
+        };
+
+        // Keep the newest N history entries; delete the rest. Each entry is four files:
+        // <base>.history.json (+ .attrs) and <base>.checkpoint.json (+ .attrs) — remove all of them.
+        // No-op when the history directory does not yet exist (fresh PVC).
+        var keepFrom = DataPlaneConstants.PulumiStateHistoryRetainCount + 1;
+        container["command"] = BuildJsonArray(
+            JsonValue.Create("sh"),
+            JsonValue.Create("-c"),
+            JsonValue.Create(
+                $"set -eu\n" +
+                $"HIST={historyMountPath}\n" +
+                "[ -d \"$HIST\" ] || exit 0\n" +
+                "find \"$HIST\" -name '*.history.json' -printf '%T@ %p\\n' " +
+                $"| sort -rn | tail -n +{keepFrom} | cut -d' ' -f2- " +
+                "| while read -r f; do b=\"${f%.history.json}\"; " +
+                "rm -f \"$b.history.json\" \"$b.history.json.attrs\" " +
+                "\"$b.checkpoint.json\" \"$b.checkpoint.json.attrs\"; done\n"));
+
+        // Mount only the history subdirectory of the state PVC, so this container is physically
+        // unable to touch state.json, stacks, or backups.
+        container["volumeMounts"] = BuildJsonArray(
+            new JsonObject
+            {
+                ["name"] = "pulumi-state",
+                ["mountPath"] = historyMountPath,
+                ["subPath"] = ".pulumi/history"
             });
     }
 
