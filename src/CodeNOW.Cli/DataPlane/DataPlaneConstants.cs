@@ -10,6 +10,15 @@ public static class DataPlaneConstants
     /// </summary>
     public const string StackName = "cn-data-plane";
 
+    /// <summary>
+    /// Default Pulumi workspace name generated for the data plane stack.
+    /// </summary>
+    public const string WorkspaceName = StackName + "-workspace";
+
+    /// <summary>
+    /// Pod template annotation carrying the bootstrap inputs hash for retained workspaces.
+    /// </summary>
+    public const string WorkspaceInputHashAnnotation = "codenow.com/bootstrap-workspace-input-hash";
 
     /// <summary>
     /// Default data plane operator configuration file name.

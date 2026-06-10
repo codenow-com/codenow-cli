@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using CodeNOW.Cli.Adapters.Kubernetes;
 using CodeNOW.Cli.Common.Json;
@@ -140,6 +142,7 @@ internal sealed class PulumiStackManifestBuilder
         ConfigureBootstrapContainer(stack, config);
         ConfigureFetchContainer(stack, config);
         ConfigureInstallPluginsContainer(stack, config);
+        ApplyWorkspaceInputHash(stack, config);
         ApplyStackLabels(stack);
         ApplySystemLabelsToPath(stack, "spec.workspaceTemplate.spec.podTemplate.metadata");
 
@@ -287,6 +290,55 @@ internal sealed class PulumiStackManifestBuilder
     private static void ApplySystemLabelsToPath(JsonObject root, string path)
     {
         KubernetesManifestTools.ApplyLabels(root, path, ProvisioningCommonTools.BootstrapLabels);
+    }
+
+    private static void ApplyWorkspaceInputHash(JsonObject stack, OperatorConfig config)
+    {
+        var annotations = JsonManifestEditor.EnsureObjectPath(
+            stack,
+            "spec.workspaceTemplate.spec.podTemplate.metadata.annotations");
+        annotations[DataPlaneConstants.WorkspaceInputHashAnnotation] = BuildWorkspaceInputHash(config);
+    }
+
+    private static string BuildWorkspaceInputHash(OperatorConfig config)
+    {
+        var secretData = new DataPlaneConfigSecretBuilder().Build(config).Data
+            ?? new Dictionary<string, byte[]>();
+        var sb = new StringBuilder();
+
+        void AddValue(string key, object? value)
+        {
+            sb.Append(key);
+            sb.Append('\0');
+            sb.Append(value?.ToString() ?? string.Empty);
+            sb.Append('\n');
+        }
+
+        AddValue("environment.name", config.Environment.Name);
+        AddValue("scm.url", config.Scm.Url);
+        AddValue("scm.authenticationMethod", config.Scm.AuthenticationMethod);
+        AddValue("containerRegistry.hostname", config.ContainerRegistry.Hostname);
+        AddValue("kubernetes.securityContextRunAsId", config.Kubernetes.SecurityContextRunAsId);
+        AddValue("kubernetes.podPlacementMode", config.Kubernetes.PodPlacementMode);
+        AddValue("pulumi.images.runtimeVersion", config.Pulumi.Images.RuntimeVersion);
+        AddValue("pulumi.images.pluginsVersion", config.Pulumi.Images.PluginsVersion);
+        AddValue("s3.enabled", config.S3.Enabled);
+        AddValue("s3.url", config.S3.Url);
+        AddValue("s3.bucket", config.S3.Bucket);
+        AddValue("s3.region", config.S3.Region);
+        AddValue("s3.authenticationMethod", config.S3.AuthenticationMethod);
+        AddValue("fluxcd.enabled", config.FluxCD?.Enabled);
+
+        foreach (var (key, value) in secretData.OrderBy(item => item.Key, StringComparer.Ordinal))
+        {
+            sb.Append("secret:");
+            sb.Append(key);
+            sb.Append('\0');
+            sb.Append(Convert.ToBase64String(value));
+            sb.Append('\n');
+        }
+
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()))).ToLowerInvariant();
     }
 
     /// <summary>

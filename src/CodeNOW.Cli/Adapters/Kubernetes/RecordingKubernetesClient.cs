@@ -177,6 +177,17 @@ internal sealed class RecordingKubernetesClient : IKubernetesClient
 
     private sealed class RecordingCustomObjectsClient(RecordingKubernetesClient parent) : IKubernetesCustomObjectsClient
     {
+        public Task<object> ListNamespacedCustomObjectAsync(
+            string group, string version, string namespaceParameter, string plural,
+            CancellationToken cancellationToken = default)
+        {
+            parent.Record(group, plural, "list");
+            return Task.FromResult<object>(new JsonObject
+            {
+                ["items"] = new JsonArray()
+            });
+        }
+
         public Task<object> GetNamespacedCustomObjectAsync(
             string group, string version, string namespaceParameter, string plural, string name,
             CancellationToken cancellationToken = default)
@@ -194,6 +205,14 @@ internal sealed class RecordingKubernetesClient : IKubernetesClient
             parent.Record(group, plural, "create", name);
             parent.Record(group, plural, "patch", name);
             parent.Record(group, plural, "update", name);
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteNamespacedCustomObjectAsync(
+            string group, string version, string namespaceParameter, string plural, string name,
+            CancellationToken cancellationToken = default)
+        {
+            parent.Record(group, plural, "delete", name);
             return Task.CompletedTask;
         }
     }

@@ -303,4 +303,3 @@ public class BootstrapManifestPrinterTests
             r.ApiGroups.Contains("authentication.k8s.io") && r.Resources.Contains("tokenreviews"));
     }
 }
-
