@@ -223,6 +223,26 @@ public class PulumiStackProvisionerTests
     }
 
     [Fact]
+    public async Task ApplyPulumiStackRbacAsync_NamesAuthDelegatorClusterRoleBindingByServiceAccount()
+    {
+        var client = new FakeKubernetesClient();
+        var provisioner = BuildProvisioner();
+        var config = new OperatorConfig();
+
+        await provisioner.ApplyPulumiStackRbacAsync(
+            client,
+            "system",
+            "sa",
+            config,
+            new[] { "system" });
+
+        var binding = Assert.Single(
+            client.AppliedObjects.OfType<V1ClusterRoleBinding>(),
+            binding => binding.RoleRef.Name == "system:auth-delegator");
+        Assert.Equal("sa:system:auth-delegator", binding.Metadata?.Name);
+    }
+
+    [Fact]
     public async Task DeletePulumiWorkspaceAsync_DeletesRetainedWorkspace()
     {
         var client = new FakeKubernetesClient();
