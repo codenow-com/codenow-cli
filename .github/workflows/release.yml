@@ -55,6 +55,27 @@ jobs:
           fi
           
       # ----------------------------
+      # Setup .NET
+      # ----------------------------
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      # ----------------------------
+      # Publish binary
+      # ----------------------------
+      - name: Publish
+        run: |
+          dotnet publish src/CodeNOW.Cli/CodeNOW.Cli.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            -p:Version=${{ inputs.version }} \
+            -p:PublishAot=true \
+            -o publish
+
+      # ----------------------------
       # Generate permissions RBAC (only once, Linux)
       # ----------------------------
       - name: Generate permissions RBAC
@@ -92,14 +113,6 @@ jobs:
           git push origin HEAD
 
       # ----------------------------
-      # Setup .NET
-      # ----------------------------
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-
-      # ----------------------------
       # Create git tag (only once)
       # ----------------------------
       - name: Create git tag
@@ -107,19 +120,6 @@ jobs:
         run: |
           git tag -a v${{ inputs.version }} -m "Release v${{ inputs.version }}"
           git push origin v${{ inputs.version }}
-
-      # ----------------------------
-      # Publish binary
-      # ----------------------------
-      - name: Publish
-        run: |
-          dotnet publish src/CodeNOW.Cli/CodeNOW.Cli.csproj \
-            -c Release \
-            -r ${{ matrix.rid }} \
-            --self-contained true \
-            -p:Version=${{ inputs.version }} \
-            -p:PublishAot=true \
-            -o publish
 
       # ----------------------------
       # Install zip
