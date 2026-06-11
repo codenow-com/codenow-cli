@@ -34,9 +34,10 @@ public static class Program
         ConsoleApp.Timeout = TimeSpan.FromSeconds(1);
         EnsureConsoleAppVersion();
         AnsiConsole.Clear();
+        var hideBanner = args.Contains("--show-permissions-only", StringComparer.Ordinal);
         var bannerPolicy = new BannerVisibilityPolicy(
         [
-            new CommandDescriptor("dp", "bootstrap", HideBanner: false),
+            new CommandDescriptor("dp", "bootstrap", HideBanner: hideBanner),
                 new CommandDescriptor("dp", "dashboard", HideBanner: true),
                 new CommandDescriptor("dp", "config", HideBanner: false)
         ]);
