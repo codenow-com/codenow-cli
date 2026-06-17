@@ -281,7 +281,7 @@ internal sealed class PulumiStackManifestBuilder
                     },
                     ["limits"] = new JsonObject
                     {
-                        ["memory"] = "1500Mi",
+                        ["memory"] = "2000Mi",
                         ["cpu"] = "1000m"
                     }
                 },
