@@ -41,18 +41,77 @@
       "type": "object",
       "additionalProperties": true,
       "required": [
-        "Url",
-        "AccessToken"
+        "Url"
       ],
       "properties": {
         "Url": {
           "type": "string",
           "format": "uri"
         },
+        "AuthenticationMethod": {
+          "type": "string",
+          "enum": [
+            "UsernamePassword",
+            "AccessToken"
+          ],
+          "default": "AccessToken"
+        },
+        "Username": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "Password": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "AccessToken": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "AuthenticationMethod"
+            ],
+            "properties": {
+              "AuthenticationMethod": {
+                "const": "UsernamePassword"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "Username",
+              "Password"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "AuthenticationMethod"
+            ],
+            "properties": {
+              "AuthenticationMethod": {
+                "const": "AccessToken"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "AccessToken"
+            ]
+          }
+        }
+      ]
     },
     "Kubernetes": {
       "type": "object",

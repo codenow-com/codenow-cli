@@ -111,7 +111,17 @@ public sealed class KubernetesNodeLabelConfig
 public sealed class NpmRegistryConfig
 {
     public string Url { get; set; } = "";
-    public string AccessToken { get; set; } = "";
+
+    public NpmAuthenticationMethod AuthenticationMethod { get; set; } = NpmAuthenticationMethod.AccessToken;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Username { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Password { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AccessToken { get; set; }
 }
 
 /// <summary>

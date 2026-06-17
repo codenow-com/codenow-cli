@@ -34,10 +34,14 @@ public class OperatorConfigServiceTests
 
             var username = root.GetProperty("ContainerRegistry").GetProperty("Username").GetString();
             var accessToken = root.GetProperty("NpmRegistry").GetProperty("AccessToken").GetString();
+            var npmUsername = root.GetProperty("NpmRegistry").GetProperty("Username").GetString();
+            var npmPassword = root.GetProperty("NpmRegistry").GetProperty("Password").GetString();
             var passphrase = root.GetProperty("Pulumi").GetProperty("Passphrase").GetString();
 
             Assert.StartsWith(SecretProtector.Prefix, username, StringComparison.Ordinal);
             Assert.StartsWith(SecretProtector.Prefix, accessToken, StringComparison.Ordinal);
+            Assert.StartsWith(SecretProtector.Prefix, npmUsername, StringComparison.Ordinal);
+            Assert.StartsWith(SecretProtector.Prefix, npmPassword, StringComparison.Ordinal);
             Assert.StartsWith(SecretProtector.Prefix, passphrase, StringComparison.Ordinal);
 
             var typeInfo = OperatorConfigJsonTypeInfoFactory.Create(() => encryptionKey);
@@ -48,6 +52,8 @@ public class OperatorConfigServiceTests
             Assert.Equal(inputConfig.ContainerRegistry.Username, decrypted.ContainerRegistry.Username);
             Assert.Equal(inputConfig.ContainerRegistry.Password, decrypted.ContainerRegistry.Password);
             Assert.Equal(inputConfig.NpmRegistry.AccessToken, decrypted.NpmRegistry.AccessToken);
+            Assert.Equal(inputConfig.NpmRegistry.Username, decrypted.NpmRegistry.Username);
+            Assert.Equal(inputConfig.NpmRegistry.Password, decrypted.NpmRegistry.Password);
             Assert.Equal(inputConfig.Pulumi.Passphrase, decrypted.Pulumi.Passphrase);
         }
         finally
@@ -86,7 +92,10 @@ public class OperatorConfigServiceTests
             NpmRegistry =
             {
                 Url = "https://npm.example.com",
-                AccessToken = "npm-token"
+                AuthenticationMethod = NpmAuthenticationMethod.AccessToken,
+                AccessToken = "npm-token",
+                Username = "npm-user",
+                Password = "npm-pass"
             },
             Scm =
             {

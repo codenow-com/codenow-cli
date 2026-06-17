@@ -90,7 +90,10 @@ configuration.
 | Field | Description |
 | --- | --- |
 | URL | Base URL of the NPM registry that hosts the Data Plane Pulumi program. |
-| Access token | Token used to authenticate to the NPM registry when pulling the program. |
+| Authentication method | Select whether to use username/password or an access token for NPM registry access. |
+| Username | NPM registry username (required for username/password auth). |
+| Password | NPM registry password (required for username/password auth). |
+| Access token | Token used to authenticate to the NPM registry when using token-based auth. |
 
 ### Container Registry
 
@@ -276,4 +279,3 @@ You can generate it yourself by running `cn dp bootstrap --show-permissions-only
 ```yaml
 --8<-- "docs/latest/assets/bootstrap-clusterrole.yaml"
 ```
-
