@@ -1,0 +1,406 @@
+[2J[3J[1;1HapiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: 
+  name: "cn-data-plane"
+rules: 
+  - apiGroups: 
+      - ""
+    resourceNames: 
+      - "cn-data-plane-ci-pipelines"
+      - "cn-data-plane-cni"
+      - "cn-data-plane-system"
+    resources: 
+      - namespaces
+    verbs: 
+      - create
+      - get
+      - patch
+      - update
+  - apiGroups: 
+      - ""
+    resourceNames: 
+      - "cn-data-plane-state"
+    resources: 
+      - persistentvolumeclaims
+    verbs: 
+      - create
+      - get
+  - apiGroups: 
+      - ""
+    resourceNames: 
+      - "cn-data-plane-config"
+      - "cn-system-image-pull-secret"
+      - "cn-system-secrets"
+      - "cn-tenant-secrets"
+    resources: 
+      - secrets
+    verbs: 
+      - get
+      - patch
+      - update
+  - apiGroups: 
+      - ""
+    resources: 
+      - secrets
+    verbs: 
+      - create
+  - apiGroups: 
+      - ""
+    resourceNames: 
+      - "cn-data-plane"
+      - "cn-pulumi-controller-manager"
+    resources: 
+      - serviceaccounts
+    verbs: 
+      - create
+      - get
+      - patch
+      - update
+  - apiGroups: 
+      - ""
+    resourceNames: 
+      - "cn-pulumi-kubernetes-operator"
+    resources: 
+      - services
+    verbs: 
+      - create
+      - get
+      - patch
+      - update
+  - apiGroups: 
+      - apiextensions.k8s.io
+    resourceNames: 
+      - programs.pulumi.com
+      - stacks.pulumi.com
+      - updates.auto.pulumi.com
+      - workspaces.auto.pulumi.com
+    resources: 
+      - customresourcedefinitions
+    verbs: 
+      - create
+      - get
+      - patch
+      - update
+  - apiGroups: 
+      - apps
+    resourceNames: 
+      - "cn-pulumi-controller-manager"
+    resources: 
+      - deployments
+    verbs: 
+      - create
+      - get
+      - patch
+      - update
+  - apiGroups: 
+      - auto.pulumi.com
+    resources: 
+      - workspaces
+    verbs: 
+      - list
+  - apiGroups: 
+      - pulumi.com
+    resourceNames: 
+      - "cn-data-plane"
+    resources: 
+      - stacks
+    verbs: 
+      - create
+      - get
+      - patch
+      - update
+  - apiGroups: 
+      - ""
+    resources: 
+      - pods
+      - pods/log
+    verbs: 
+      - get
+      - list
+      - delete
+      - watch
+  - apiGroups: 
+      - ""
+    resourceNames: 
+      - "cn-data-plane-workspace-0"
+    resources: 
+      - pods/exec
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - rbac.authorization.k8s.io
+    resources: 
+      - clusterroles
+      - clusterrolebindings
+      - roles
+      - rolebindings
+    verbs: 
+      - list
+      - watch
+  - apiGroups: 
+      - rbac.authorization.k8s.io
+    resourceNames: 
+      - "cn-data-plane-admin"
+      - "cn-data-plane-reader"
+      - "cn-data-plane:system:auth-delegator"
+      - "cn-pulumi-kubernetes-operator"
+      - "cn-pulumi-kubernetes-operator-controller-manager"
+      - "cn-pulumi-kubernetes-operator-edit"
+      - "cn-pulumi-kubernetes-operator-view"
+      - "cn-pulumi-leader-election-role"
+      - "cn-pulumi-leader-election-rolebinding"
+      - "cn-pulumi-metrics-auth-role"
+      - "cn-pulumi-metrics-auth-rolebinding"
+      - "cn-pulumi-metrics-reader"
+      - "cn-pulumi-token-request-role"
+      - "cn-pulumi-token-request-rolebinding"
+    resources: 
+      - clusterroles
+      - clusterrolebindings
+      - roles
+      - rolebindings
+    verbs: 
+      - get
+      - create
+      - patch
+      - update
+      - delete
+      - escalate
+      - bind
+  - apiGroups: 
+      - pulumi.com
+      - auto.pulumi.com
+    resources: 
+      - "*"
+    verbs: 
+      - create
+      - delete
+      - deletecollection
+      - patch
+      - update
+  - apiGroups: 
+      - authentication.k8s.io
+    resources: 
+      - tokenreviews
+    verbs: 
+      - create
+  - apiGroups: 
+      - authorization.k8s.io
+    resources: 
+      - subjectaccessreviews
+    verbs: 
+      - create
+  - nonResourceURLs: 
+      - /metrics
+    verbs: 
+      - get
+  - apiGroups: 
+      - ""
+    resources: 
+      - configmaps
+    verbs: 
+      - get
+      - list
+      - watch
+  - apiGroups: 
+      - ""
+    resources: 
+      - events
+    verbs: 
+      - create
+      - patch
+      - update
+  - apiGroups: 
+      - ""
+    resources: 
+      - pods
+      - services
+    verbs: 
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: 
+      - ""
+    resources: 
+      - secrets
+    verbs: 
+      - create
+      - get
+      - list
+      - watch
+  - apiGroups: 
+      - apps
+    resources: 
+      - statefulsets
+    verbs: 
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: 
+      - auto.pulumi.com
+    resources: 
+      - updates
+      - workspaces
+    verbs: 
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: 
+      - auto.pulumi.com
+    resources: 
+      - updates/finalizers
+      - workspaces/finalizers
+    verbs: 
+      - update
+  - apiGroups: 
+      - auto.pulumi.com
+    resources: 
+      - updates/status
+      - workspaces/status
+    verbs: 
+      - get
+      - patch
+      - update
+  - apiGroups: 
+      - auto.pulumi.com
+    resources: 
+      - workspaces/rpc
+    verbs: 
+      - use
+  - apiGroups: 
+      - pulumi.com
+    resources: 
+      - programs
+      - stacks
+    verbs: 
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups: 
+      - pulumi.com
+    resources: 
+      - programs/finalizers
+      - stacks/finalizers
+    verbs: 
+      - update
+  - apiGroups: 
+      - pulumi.com
+    resources: 
+      - programs/status
+      - stacks/status
+    verbs: 
+      - get
+      - patch
+      - update
+  - apiGroups: 
+      - source.toolkit.fluxcd.io
+    resources: 
+      - buckets
+      - gitrepositories
+      - ocirepositories
+    verbs: 
+      - get
+      - list
+      - watch
+  - apiGroups: 
+      - pulumi.com
+      - auto.pulumi.com
+    resources: 
+      - "*"
+    verbs: 
+      - get
+      - list
+      - watch
+  - apiGroups: 
+      - admissionregistration.k8s.io
+    resources: 
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - apiextensions.k8s.io
+    resources: 
+      - customresourcedefinitions
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - apiregistration.k8s.io
+    resources: 
+      - apiservices
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - rbac.authorization.k8s.io
+    resources: 
+      - clusterroles
+      - clusterrolebindings
+      - roles
+      - rolebindings
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - networking.k8s.io
+    resources: 
+      - networkpolicies
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - k8s.cni.cncf.io
+    resources: 
+      - "network-attachment-definitions"
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - operator.tekton.dev
+    resources: 
+      - "*"
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - "external-secrets.io"
+    resources: 
+      - clusterexternalsecrets
+      - clustersecretstores
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - postgresql.cnpg.io
+    resources: 
+      - clusterimagecatalogs
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - scheduling.k8s.io
+    resources: 
+      - priorityclasses
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - authentication.concierge.pinniped.dev
+    resources: 
+      - jwtauthenticators
+    verbs: 
+      - "*"
+  - apiGroups: 
+      - config.concierge.pinniped.dev
+    resources: 
+      - credentialissuers
+    verbs: 
+      - "*"
