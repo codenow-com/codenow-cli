@@ -1,12 +1,4 @@
-[2J[3J[1;1H
-[38;5;14m   ______          __     _   ______  _       __[0m
-[38;5;45m  / ____/___  ____/ /__  / | / / __ \| |     / /[0m
-[38;5;14m / /   / __ \/ __  / _ \/  |/ / / / /| | /| / / [0m
-[38;5;45m/ /___/ /_/ / /_/ /  __/ /|  / /_/ / | |/ |/ /  [0m
-[38;5;14m\____/\____/\__,_/\___/_/ |_/\____/  |__/|__/   [0m
-[38;5;45m         Cloud-native Delivery Platform         [0m
-
-apiVersion: rbac.authorization.k8s.io/v1
+[2J[3J[1;1HapiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata: 
   name: "cn-data-plane"
