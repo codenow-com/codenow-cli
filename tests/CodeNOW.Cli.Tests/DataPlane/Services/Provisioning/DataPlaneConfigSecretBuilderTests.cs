@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using CodeNOW.Cli.DataPlane;
 using CodeNOW.Cli.DataPlane.Models;
+using CodeNOW.Cli.DataPlane.Serialization;
 using CodeNOW.Cli.DataPlane.Services.Provisioning;
 using Xunit;
 
@@ -34,6 +35,7 @@ public class DataPlaneConfigSecretBuilderTests
             NpmRegistry =
             {
                 Url = "registry.example.com/npm",
+                AuthenticationMethod = NpmAuthenticationMethod.AccessToken,
                 AccessToken = "token"
             }
         };
@@ -52,6 +54,58 @@ public class DataPlaneConfigSecretBuilderTests
 
         Assert.Equal(
             "registry=https://registry.example.com/npm\n//registry.example.com/npm/:_authToken=token\n",
+            GetString(data, DataPlaneConstants.DataPlaneConfigKeyNpmrc));
+    }
+
+    [Fact]
+    public void Build_UsesAccessTokenNpmrcForExistingConfigWithoutAuthenticationMethod()
+    {
+        var config = JsonSerializer.Deserialize(
+            """
+            {
+              "NpmRegistry": {
+                "Url": "https://registry.example.com/npm",
+                "AccessToken": "existing-token"
+              }
+            }
+            """,
+            OperatorConfigJsonContext.Default.OperatorConfig);
+
+        Assert.NotNull(config);
+        Assert.Equal(NpmAuthenticationMethod.AccessToken, config!.NpmRegistry.AuthenticationMethod);
+
+        var secret = new DataPlaneConfigSecretBuilder().Build(config);
+        var data = secret.Data!;
+
+        Assert.Equal(
+            "registry=https://registry.example.com/npm\n//registry.example.com/npm/:_authToken=existing-token\n",
+            GetString(data, DataPlaneConstants.DataPlaneConfigKeyNpmrc));
+    }
+
+    [Fact]
+    public void Build_AddsUsernamePasswordNpmrcWhenConfigured()
+    {
+        var builder = new DataPlaneConfigSecretBuilder();
+        var config = new OperatorConfig
+        {
+            NpmRegistry =
+            {
+                Url = "https://europe-west1-npm.pkg.dev/PROJECT_ID/REPOSITORY/",
+                AuthenticationMethod = NpmAuthenticationMethod.UsernamePassword,
+                Username = "_json_key_base64",
+                Password = "${GAR_NPM_PASSWORD}"
+            }
+        };
+
+        var secret = builder.Build(config);
+        var data = secret.Data!;
+
+        Assert.Equal(
+            "registry=https://europe-west1-npm.pkg.dev/PROJECT_ID/REPOSITORY\n" +
+            "//europe-west1-npm.pkg.dev/PROJECT_ID/REPOSITORY/:always-auth=true\n" +
+            "//europe-west1-npm.pkg.dev/PROJECT_ID/REPOSITORY/:username=_json_key_base64\n" +
+            "//europe-west1-npm.pkg.dev/PROJECT_ID/REPOSITORY/:_password=${GAR_NPM_PASSWORD}\n" +
+            "//europe-west1-npm.pkg.dev/PROJECT_ID/REPOSITORY/:email=not-used@example.com\n",
             GetString(data, DataPlaneConstants.DataPlaneConfigKeyNpmrc));
     }
 

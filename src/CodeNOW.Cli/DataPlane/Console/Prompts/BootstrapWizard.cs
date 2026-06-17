@@ -141,10 +141,45 @@ internal sealed class BootstrapWizard
             "URL                                         :",
             initialValue: usePrefill ? opConfig.NpmRegistry.Url : null,
             validator: PromptValidators.ValidateUrl);
-        opConfig.NpmRegistry.AccessToken = PromptSecret(
-            promptFactory,
-            "Access token                                :",
-            initialValue: usePrefill ? opConfig.NpmRegistry.AccessToken : null);
+        var npmAuthChoices = PromptFactory.BuildSelectionChoices(
+            usePrefill ? opConfig.NpmRegistry.AuthenticationMethod : null,
+            NpmAuthenticationMethod.UsernamePassword,
+            NpmAuthenticationMethod.AccessToken);
+        opConfig.NpmRegistry.AuthenticationMethod = AnsiConsole.Prompt(
+            new SelectionPrompt<NpmAuthenticationMethod>()
+                .Title("Authentication method?")
+                .UseConverter(m => m switch
+                {
+                    NpmAuthenticationMethod.UsernamePassword => "Username / password",
+                    NpmAuthenticationMethod.AccessToken => "Access token",
+                    _ => m.ToString()
+                })
+                .AddChoices(npmAuthChoices)
+        );
+
+        switch (opConfig.NpmRegistry.AuthenticationMethod)
+        {
+            case NpmAuthenticationMethod.UsernamePassword:
+                opConfig.NpmRegistry.Username = PromptText(
+                    promptFactory,
+                    "Username                                    :",
+                    initialValue: usePrefill ? opConfig.NpmRegistry.Username : null);
+                opConfig.NpmRegistry.Password = PromptSecret(
+                    promptFactory,
+                    "Password                                    :",
+                    initialValue: usePrefill ? opConfig.NpmRegistry.Password : null);
+                opConfig.NpmRegistry.AccessToken = null;
+                break;
+
+            case NpmAuthenticationMethod.AccessToken:
+                opConfig.NpmRegistry.AccessToken = PromptSecret(
+                    promptFactory,
+                    "Access token                                :",
+                    initialValue: usePrefill ? opConfig.NpmRegistry.AccessToken : null);
+                opConfig.NpmRegistry.Username = null;
+                opConfig.NpmRegistry.Password = null;
+                break;
+        }
         AnsiConsole.WriteLine();
     }
 

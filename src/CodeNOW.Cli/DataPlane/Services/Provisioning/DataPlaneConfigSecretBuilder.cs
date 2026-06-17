@@ -161,22 +161,44 @@ public sealed class DataPlaneConfigSecretBuilder
     /// </summary>
     private static string BuildNpmrc(NpmRegistryConfig npmRegistry)
     {
-        if (string.IsNullOrWhiteSpace(npmRegistry.Url) ||
-            string.IsNullOrWhiteSpace(npmRegistry.AccessToken))
+        if (string.IsNullOrWhiteSpace(npmRegistry.Url))
             return string.Empty;
 
-        var registryUrl = npmRegistry.Url.Trim();
+        var (registryUrl, authHost) = NormalizeNpmRegistryUrl(npmRegistry.Url);
+        if (string.IsNullOrWhiteSpace(registryUrl) ||
+            string.IsNullOrWhiteSpace(authHost))
+            return string.Empty;
+
+        return npmRegistry.AuthenticationMethod switch
+        {
+            NpmAuthenticationMethod.UsernamePassword
+                when !string.IsNullOrWhiteSpace(npmRegistry.Username) &&
+                     !string.IsNullOrWhiteSpace(npmRegistry.Password) =>
+                $"registry={registryUrl}\n" +
+                $"//{authHost}/:always-auth=true\n" +
+                $"//{authHost}/:username={npmRegistry.Username}\n" +
+                $"//{authHost}/:_password={npmRegistry.Password}\n" +
+                $"//{authHost}/:email=not-used@example.com\n",
+
+            NpmAuthenticationMethod.AccessToken
+                when !string.IsNullOrWhiteSpace(npmRegistry.AccessToken) =>
+                $"registry={registryUrl}\n//{authHost}/:_authToken={npmRegistry.AccessToken}\n",
+
+            _ => string.Empty
+        };
+    }
+
+    private static (string RegistryUrl, string AuthHost) NormalizeNpmRegistryUrl(string registry)
+    {
+        var registryUrl = registry.Trim();
         if (!registryUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             registryUrl = $"https://{registryUrl.TrimStart('/')}";
 
-        var authHost = registryUrl;
-        if (Uri.TryCreate(registryUrl, UriKind.Absolute, out var uri))
-        {
-            var path = uri.AbsolutePath.TrimEnd('/');
-            registryUrl = uri.GetLeftPart(UriPartial.Authority) + path;
-            authHost = uri.Host + path;
-        }
+        if (!Uri.TryCreate(registryUrl, UriKind.Absolute, out var uri))
+            return (registryUrl.TrimEnd('/'), registryUrl.TrimEnd('/'));
 
-        return $"registry={registryUrl}\n//{authHost}/:_authToken={npmRegistry.AccessToken}\n";
+        var path = uri.AbsolutePath.TrimEnd('/');
+        return (uri.GetLeftPart(UriPartial.Authority) + path, uri.Authority + path);
     }
+
 }
