@@ -95,6 +95,58 @@ public class PulumiOperatorProvisionerTests
     }
 
     [Fact]
+    public async Task ApplyOperatorDeploymentAsync_SetsHttpProxyEnvVars_WhenProxyEnabled()
+    {
+        WriteManifests(
+            rbacYaml: "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: controller-manager\n",
+            crdYaml: "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: stacks.pulumi.com\n",
+            managerYaml:
+                """
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: controller-manager
+                spec:
+                  template:
+                    spec:
+                      serviceAccountName: controller-manager
+                      containers:
+                        - name: manager
+                          image: old
+                """);
+
+        var provisioner = BuildProvisioner();
+        var client = new FakeKubernetesClient();
+        var config = new OperatorConfig
+        {
+            Kubernetes = { Namespaces = { System = { Name = "system" } } },
+            HttpProxy =
+            {
+                Enabled = true,
+                Hostname = "proxy.example.com",
+                Port = 3128,
+                NoProxy = ".cluster.local"
+            }
+        };
+
+        await provisioner.ApplyOperatorDeploymentAsync(client, config);
+
+        var deployment = client.AppliedObjects.OfType<V1Deployment>().Single();
+        var env = deployment.Spec?.Template?.Spec?.Containers?.First().Env;
+        Assert.NotNull(env);
+
+        var httpProxy = env.Single(e => string.Equals(e.Name, "HTTP_PROXY", StringComparison.Ordinal));
+        Assert.Equal("proxy.example.com:3128", httpProxy.Value);
+
+        var httpsProxy = env.Single(e => string.Equals(e.Name, "HTTPS_PROXY", StringComparison.Ordinal));
+        Assert.Equal("proxy.example.com:3128", httpsProxy.Value);
+
+        var noProxy = env.Single(e => string.Equals(e.Name, "NO_PROXY", StringComparison.Ordinal));
+        Assert.Contains(".cluster.local", noProxy.Value, StringComparison.Ordinal);
+        Assert.Contains($"{DataPlaneConstants.WorkspaceName}.system", noProxy.Value, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ApplyOperatorDeploymentAsync_AddsCustomCaVolumeAndMount()
     {
         WriteManifests(
