@@ -493,24 +493,32 @@ internal sealed class PulumiOperatorProvisioner : IPulumiOperatorProvisioner
         {
             jsonObj.Set("spec.template.spec.serviceAccountName", EnsurePrefixed(serviceAccountName));
         }
+
+        var needsContainerMutations = config.HttpProxy.Enabled || !string.IsNullOrWhiteSpace(config.Security.CustomCaBase64);
+        if (!needsContainerMutations)
+            return;
+
+        var podSpecObj = JsonManifestEditor.EnsureObjectPath(jsonObj, "spec.template.spec");
+        var containers = JsonManifestEditor.EnsureArray(podSpecObj, "containers");
+        JsonObject container;
+        if (containers.Count == 0 || containers[0] is not JsonObject existingContainer)
+        {
+            container = new JsonObject();
+            if (containers.Count == 0)
+                containers.Add((JsonNode)container);
+            else
+                containers[0] = container;
+        }
+        else
+        {
+            container = existingContainer;
+        }
+
+        var workspaceNoProxy = $"{DataPlaneConstants.WorkspaceName}.{config.Kubernetes.Namespaces.System.Name}";
+        ProvisioningCommonTools.EnsureProxyEnv(container, config, workspaceNoProxy);
+
         if (!string.IsNullOrWhiteSpace(config.Security.CustomCaBase64))
         {
-            var podSpecObj = JsonManifestEditor.EnsureObjectPath(jsonObj, "spec.template.spec");
-            var containers = JsonManifestEditor.EnsureArray(podSpecObj, "containers");
-            JsonObject container;
-            if (containers.Count == 0 || containers[0] is not JsonObject existingContainer)
-            {
-                container = new JsonObject();
-                if (containers.Count == 0)
-                    containers.Add((JsonNode)container);
-                else
-                    containers[0] = container;
-            }
-            else
-            {
-                container = existingContainer;
-            }
-
             var volumeMounts = JsonManifestEditor.EnsureArray(container, "volumeMounts");
             ProvisioningCommonTools.EnsureVolumeMount(
                 volumeMounts,

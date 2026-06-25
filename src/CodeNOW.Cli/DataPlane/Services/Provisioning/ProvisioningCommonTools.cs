@@ -25,7 +25,8 @@ internal static class ProvisioningCommonTools
     /// <summary>
     /// Adds HTTP proxy environment variables to a container when proxy is enabled.
     /// </summary>
-    public static void EnsureProxyEnv(JsonObject container, OperatorConfig config)
+    /// <param name="additionalNoProxy">Extra entries appended to NO_PROXY (comma-separated).</param>
+    public static void EnsureProxyEnv(JsonObject container, OperatorConfig config, string? additionalNoProxy = null)
     {
         if (!config.HttpProxy.Enabled)
             return;
@@ -36,8 +37,20 @@ internal static class ProvisioningCommonTools
         var env = JsonManifestEditor.EnsureArray(container, "env");
         JsonManifestEditor.EnsureEnvVar(env, "HTTP_PROXY", proxyValue);
         JsonManifestEditor.EnsureEnvVar(env, "HTTPS_PROXY", proxyValue);
-        if (!string.IsNullOrWhiteSpace(config.HttpProxy.NoProxy))
-            JsonManifestEditor.EnsureEnvVar(env, "NO_PROXY", config.HttpProxy.NoProxy);
+        var noProxy = MergeNoProxy(config.HttpProxy.NoProxy, additionalNoProxy);
+        if (!string.IsNullOrWhiteSpace(noProxy))
+            JsonManifestEditor.EnsureEnvVar(env, "NO_PROXY", noProxy);
+    }
+
+    private static string? MergeNoProxy(string? configured, string? additional)
+    {
+        if (string.IsNullOrWhiteSpace(configured) && string.IsNullOrWhiteSpace(additional))
+            return null;
+        if (string.IsNullOrWhiteSpace(configured))
+            return additional;
+        if (string.IsNullOrWhiteSpace(additional))
+            return configured;
+        return $"{configured},{additional}";
     }
 
     /// <summary>
