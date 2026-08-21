@@ -5,7 +5,7 @@
   },
   "runtime": {
     "image": "codenow-com/pulumi-nodejs",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "plugins": {
     "image": "codenow-com/pulumi-operator-plugins",
