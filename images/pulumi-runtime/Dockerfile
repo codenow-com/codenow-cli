@@ -21,6 +21,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     echo "deb [signed-by=/etc/apt/keyrings/helm.gpg] https://packages.buildkite.com/helm-linux/helm-debian/any/ any main" > /etc/apt/sources.list.d/helm.list && \
     apt-get update -y && \
     apt-get install -y kubectl=${K8S_VERSION}.* helm=${HELM_VERSION}.* && \
+    apt-get install -y bsdextrautils jq procps && \
     rm -rf /var/lib/apt/lists/*
 
 # remove unnecessary user in conflict with pulumi user UID
