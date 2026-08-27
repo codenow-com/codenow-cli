@@ -198,6 +198,13 @@ public static class DataPlaneConstants
     /// </summary>
     public const int PulumiStateHistoryRetainCount = 5;
 
+    /// <summary>
+    /// Number of resource operations Pulumi runs in parallel during stack updates
+    /// (equivalent to <c>pulumi up --parallel &lt;n&gt;</c>). Pulumi defaults to unbounded
+    /// parallelism, which overloads the workspace pod; the data plane caps it instead.
+    /// </summary>
+    public const int PulumiUpdateParallelism = 4;
+
 
     /// <summary>
     /// App name label value applied to bootstrap-generated data plane resources.

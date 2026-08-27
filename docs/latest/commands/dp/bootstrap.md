@@ -25,6 +25,9 @@ The diagram illustrates the bootstrap lifecycle triggered by `dp bootstrap`:
     - [Command Line](#command-line)
 - [Bootstrap Execution](#bootstrap-execution)
   - [Minimum RBAC Permissions](#minimum-rbac-permissions)
+- [Troubleshooting](#troubleshooting)
+  - [OOM Kill](#oom-kill)
+  - [API Server Throttling](#api-server-throttling)
 
 ## Usage
 
@@ -279,3 +282,23 @@ You can generate it yourself by running `cn dp bootstrap --show-permissions-only
 ```yaml
 --8<-- "docs/latest/assets/bootstrap-clusterrole.yaml"
 ```
+
+---
+
+## Troubleshooting
+
+### OOM Kill
+
+If the workspace pod is terminated with `OOMKilled`, increase the memory limit
+in the `Stack` resource under `spec.workspaceTemplate.spec.resources`.
+
+### API Server Throttling
+
+On some clusters the API server is downsized and can have problems handling a
+big load. For this reason the parallelism of resource operations is set to `4`
+in the `Stack` resource under `spec.updateTemplate.spec.parallel`.
+
+!!! warning "Do not set parallelism below the minimum"
+
+    `4` is the current minimum. Setting a lower value introduces a possible risk
+    of a deadlock.
