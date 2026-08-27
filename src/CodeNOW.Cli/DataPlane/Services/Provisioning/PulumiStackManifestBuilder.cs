@@ -105,6 +105,13 @@ internal sealed class PulumiStackManifestBuilder
                 },
                 ["destroyOnFinalize"] = true,
                 ["retryOnUpdateConflict"] = true,
+                ["updateTemplate"] = new JsonObject
+                {
+                    ["spec"] = new JsonObject
+                    {
+                        ["parallel"] = DataPlaneConstants.PulumiUpdateParallelism
+                    }
+                },
                 ["workspaceTemplate"] = BuildPulumiWorkspaceTemplate(config, image)
             }
         };

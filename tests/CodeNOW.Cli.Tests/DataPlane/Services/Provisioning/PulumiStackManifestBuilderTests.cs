@@ -41,6 +41,26 @@ public class PulumiStackManifestBuilderTests
     }
 
     [Fact]
+    public void BuildStack_SetsUpdateParallelism()
+    {
+        var builder = BuildBuilder();
+        var config = new OperatorConfig
+        {
+            Environment = { Name = "dev" },
+            Kubernetes = { Namespaces = { System = { Name = "system" } } },
+            Scm = { Url = "https://git.example.com/repo" }
+        };
+
+        var stack = builder.BuildStack(config, "sa");
+        var updateSpec = stack["spec"]!.AsObject()["updateTemplate"]!.AsObject()["spec"]!.AsObject();
+
+        Assert.Equal(4, DataPlaneConstants.PulumiUpdateParallelism);
+        Assert.Equal(
+            DataPlaneConstants.PulumiUpdateParallelism,
+            updateSpec["parallel"]!.GetValue<int>());
+    }
+
+    [Fact]
     public void BuildStack_FluxcdEnabled_UsesFluxSourceAndOmitsScmFields()
     {
         var builder = BuildBuilder();
