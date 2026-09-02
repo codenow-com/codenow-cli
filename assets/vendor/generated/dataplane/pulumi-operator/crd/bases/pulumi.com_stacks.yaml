@@ -139,8 +139,10 @@ spec:
                   When enabled, the resync frequency is controlled by ResyncFrequencySeconds (default 60s).
                 type: boolean
               destroyOnFinalize:
-                description: (optional) DestroyOnFinalize can be set to true to destroy
-                  the stack completely upon deletion of the Stack custom resource.
+                description: |-
+                  (optional) DestroyOnFinalize can be set to true to destroy the stack completely upon deletion of the Stack custom resource.
+                  NOTE: destroy runs in a workspace pod, which cannot be created in a Terminating namespace; delete the Stack's
+                  namespace separately or destroy can deadlock and orphan resources. See the troubleshooting guide for recovery.
                 type: boolean
               envRefs:
                 additionalProperties:
@@ -1165,6 +1167,16 @@ spec:
                         type: string
                       permalink:
                         type: string
+                      projectInfo:
+                        description: |-
+                          ProjectInfoApplyConfiguration represents a declarative configuration of the ProjectInfo type for use
+                          with apply.
+                        properties:
+                          name:
+                            type: string
+                          runtime:
+                            type: string
+                        type: object
                       startTime:
                         format: date-time
                         type: string
@@ -10295,6 +10307,16 @@ spec:
                             - containers
                             type: object
                         type: object
+                      projectInfo:
+                        description: |-
+                          ProjectInfoSourceApplyConfiguration represents a declarative configuration of the ProjectInfoSource type for use
+                          with apply.
+                        properties:
+                          name:
+                            type: string
+                          runtime:
+                            type: string
+                        type: object
                       pulumiLogLevel:
                         format: int32
                         type: integer
@@ -10364,6 +10386,26 @@ spec:
                         type: string
                       serviceAccountName:
                         type: string
+                      serviceTemplate:
+                        description: |-
+                          EmbeddedServiceTemplateSpecApplyConfiguration represents a declarative configuration of the EmbeddedServiceTemplateSpec type for use
+                          with apply.
+                        properties:
+                          metadata:
+                            description: |-
+                              EmbeddedObjectMetaApplyConfiguration represents a declarative configuration of the EmbeddedObjectMeta type for use
+                              with apply.
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                            type: object
+                        type: object
                       stacks:
                         items:
                           description: |-
@@ -10601,6 +10643,25 @@ spec:
                 description: Outputs contains the exported stack output variables
                   resulting from a deployment.
                 type: object
+              projectInfo:
+                description: |-
+                  ProjectInfo caches the project name and runtime from Pulumi.yaml as
+                  reported by the agent during a successful operation. Used to bootstrap
+                  a project-info workspace for destroy when the source artifact is unavailable.
+                  Persisted across the Stack's lifetime in etcd.
+                properties:
+                  name:
+                    description: Name is the Pulumi project name (the `name:` field
+                      in Pulumi.yaml).
+                    type: string
+                  runtime:
+                    description: Runtime is the Pulumi runtime declaration (the `runtime:`
+                      field in Pulumi.yaml).
+                    type: string
+                required:
+                - name
+                - runtime
+                type: object
             type: object
         type: object
         x-kubernetes-validations:
@@ -10709,8 +10770,10 @@ spec:
                   When enabled, the resync frequency is controlled by ResyncFrequencySeconds (default 60s).
                 type: boolean
               destroyOnFinalize:
-                description: (optional) DestroyOnFinalize can be set to true to destroy
-                  the stack completely upon deletion of the Stack custom resource.
+                description: |-
+                  (optional) DestroyOnFinalize can be set to true to destroy the stack completely upon deletion of the Stack custom resource.
+                  NOTE: destroy runs in a workspace pod, which cannot be created in a Terminating namespace; delete the Stack's
+                  namespace separately or destroy can deadlock and orphan resources. See the troubleshooting guide for recovery.
                 type: boolean
               envRefs:
                 additionalProperties:
@@ -11735,6 +11798,16 @@ spec:
                         type: string
                       permalink:
                         type: string
+                      projectInfo:
+                        description: |-
+                          ProjectInfoApplyConfiguration represents a declarative configuration of the ProjectInfo type for use
+                          with apply.
+                        properties:
+                          name:
+                            type: string
+                          runtime:
+                            type: string
+                        type: object
                       startTime:
                         format: date-time
                         type: string
@@ -20865,6 +20938,16 @@ spec:
                             - containers
                             type: object
                         type: object
+                      projectInfo:
+                        description: |-
+                          ProjectInfoSourceApplyConfiguration represents a declarative configuration of the ProjectInfoSource type for use
+                          with apply.
+                        properties:
+                          name:
+                            type: string
+                          runtime:
+                            type: string
+                        type: object
                       pulumiLogLevel:
                         format: int32
                         type: integer
@@ -20934,6 +21017,26 @@ spec:
                         type: string
                       serviceAccountName:
                         type: string
+                      serviceTemplate:
+                        description: |-
+                          EmbeddedServiceTemplateSpecApplyConfiguration represents a declarative configuration of the EmbeddedServiceTemplateSpec type for use
+                          with apply.
+                        properties:
+                          metadata:
+                            description: |-
+                              EmbeddedObjectMetaApplyConfiguration represents a declarative configuration of the EmbeddedObjectMeta type for use
+                              with apply.
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                            type: object
+                        type: object
                       stacks:
                         items:
                           description: |-
