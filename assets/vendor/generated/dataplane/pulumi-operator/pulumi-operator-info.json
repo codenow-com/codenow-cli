@@ -1,7 +1,7 @@
 {
   "operator": {
     "image": "pulumi/pulumi-kubernetes-operator",
-    "version": "v2.7.0"
+    "version": "v2.9.0"
   },
   "runtime": {
     "image": "codenow-com/pulumi-nodejs",
