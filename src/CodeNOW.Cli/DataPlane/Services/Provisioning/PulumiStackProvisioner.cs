@@ -168,7 +168,7 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
                 new V1PolicyRule
                 {
                     ApiGroups = ["admissionregistration.k8s.io"],
-                    Resources = ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"],
+                    Resources = ["mutatingwebhookconfigurations", "validatingwebhookconfigurations", "validatingadmissionpolicies", "validatingadmissionpolicybindings"],
                     Verbs = ["*"]
                 },
                 new V1PolicyRule
