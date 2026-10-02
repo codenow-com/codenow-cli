@@ -240,6 +240,52 @@ public class PulumiStackManifestBuilderTests
     }
 
     [Fact]
+    public void BuildStack_ConfiguresBuildContainerLastWithWorkspaceMounts()
+    {
+        var builder = BuildBuilder();
+        var config = new OperatorConfig
+        {
+            Kubernetes = { Namespaces = { System = { Name = "system" } } }
+        };
+
+        var stack = builder.BuildStack(config, "sa");
+        var workspaceSpec = stack["spec"]!.AsObject()["workspaceTemplate"]!.AsObject()["spec"]!.AsObject();
+        var initContainers = GetInitContainers(stack);
+        var build = initContainers
+            .First(node => node?["name"]?.GetValue<string>() == "build")!.AsObject();
+
+        // Depends on the /share/workspace symlink that fetch creates, so it has to run last.
+        Assert.Equal("build", initContainers[^1]!["name"]!.GetValue<string>());
+
+        // Reuses the pulumi runtime image, which already carries node and npm.
+        Assert.Equal(workspaceSpec["image"]!.GetValue<string>(), build["image"]!.GetValue<string>());
+
+        var security = build["securityContext"]!.AsObject();
+        Assert.True(security["readOnlyRootFilesystem"]!.GetValue<bool>());
+        Assert.False(security["allowPrivilegeEscalation"]!.GetValue<bool>());
+
+        // The operator injects /share only into its own containers, so all mounts are explicit.
+        var mounts = build["volumeMounts"]!.AsArray();
+        Assert.Contains(mounts, m => m?["mountPath"]?.GetValue<string>() == "/share");
+        Assert.Contains(mounts, m => m?["mountPath"]?.GetValue<string>() == "/tmp");
+        Assert.Contains(mounts, m => m?["mountPath"]?.GetValue<string>() == PulumiStackManifestBuilder.PulumiHomePath);
+        var npmrc = mounts
+            .First(m => m?["name"]?.GetValue<string>() == "npmrc")!.AsObject();
+        Assert.Equal(".npmrc", npmrc["subPath"]!.GetValue<string>());
+
+        // npm resolves its cache and .npmrc from HOME, which the operator does not propagate here.
+        Assert.Contains(build["env"]!.AsArray(), node =>
+            node?["name"]?.GetValue<string>() == "HOME" &&
+            node?["value"]?.GetValue<string>() == PulumiStackManifestBuilder.PulumiHomePath);
+
+        // Installs dependencies, then compiles only when the program defines a build script.
+        var command = build["command"]!.AsArray()[^1]!.GetValue<string>();
+        Assert.Contains("cd /share/workspace", command);
+        Assert.Contains("npm install", command);
+        Assert.Contains("npm run build --if-present", command);
+    }
+
+    [Fact]
     public void BuildStack_AddsHistoryPruneInitContainer_WhenS3Disabled()
     {
         var builder = BuildBuilder();

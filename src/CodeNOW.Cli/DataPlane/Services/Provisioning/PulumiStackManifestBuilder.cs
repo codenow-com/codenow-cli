@@ -165,6 +165,8 @@ internal sealed class PulumiStackManifestBuilder
         {
             ConfigureHistoryPruneContainer(stack, config);
         }
+        // Last, so it runs after fetch has checked the program out and symlinked /share/workspace.
+        ConfigureBuildContainer(stack, config);
         ApplyWorkspaceInputHash(stack, config);
         ApplyStackLabels(stack);
         ApplySystemLabelsToPath(stack, "spec.workspaceTemplate.spec.podTemplate.metadata");
@@ -653,6 +655,89 @@ internal sealed class PulumiStackManifestBuilder
                 ["name"] = "pulumi",
                 ["mountPath"] = PulumiHomePath
             });
+    }
+
+    /// <summary>
+    /// Configures the init container that installs npm dependencies and compiles the program ahead
+    /// of time. Pulumi validates the project's <c>main</c> before it invokes the package manager and
+    /// never runs build scripts itself, so a compiled entrypoint has to be on disk before the agent
+    /// serves its first call. Doing it here rather than through ts-node at program load keeps the
+    /// TypeScript compiler and a second V8 isolate out of the workspace, which measured ~400 MB of
+    /// the pulumi container's heap. The build script is optional, so repositories whose program is
+    /// still a <c>.ts</c> entrypoint are unaffected beyond having dependencies installed earlier.
+    /// Must remain the last init container: it relies on the /share/workspace symlink that
+    /// <c>fetch</c> creates.
+    /// </summary>
+    private void ConfigureBuildContainer(JsonObject stack, OperatorConfig config)
+    {
+        var podSpec = JsonManifestEditor.EnsureObjectPath(stack, "spec.workspaceTemplate.spec.podTemplate.spec");
+        var initContainers = JsonManifestEditor.EnsureArray(podSpec, "initContainers");
+        var container = JsonManifestEditor.FindByName(initContainers, "build");
+        if (container is null)
+        {
+            container = new JsonObject
+            {
+                ["name"] = "build"
+            };
+            initContainers.Add((JsonNode)container);
+        }
+
+        container["securityContext"] = new JsonObject
+        {
+            ["readOnlyRootFilesystem"] = true,
+            ["allowPrivilegeEscalation"] = false
+        };
+        container["image"] = BuildPulumiImage(config);
+        container["resources"] = new JsonObject
+        {
+            ["limits"] = new JsonObject
+            {
+                ["memory"] = "2Gi",
+                ["cpu"] = "1"
+            }
+        };
+        // The operator only propagates the workspace environment to containers it owns, and npm
+        // resolves both its cache and the .npmrc mounted below relative to HOME.
+        container["env"] = BuildJsonArray(
+            new JsonObject
+            {
+                ["name"] = "HOME",
+                ["value"] = PulumiHomePath
+            });
+        container["command"] = BuildJsonArray(
+            JsonValue.Create("sh"),
+            JsonValue.Create("-c"),
+            JsonValue.Create(
+                "set -eu\n" +
+                "cd /share/workspace\n" +
+                "npm install --no-audit --no-fund\n" +
+                "npm run build --if-present\n"));
+        // The operator injects /share only into its own containers, so every mount this needs has
+        // to be declared here.
+        container["volumeMounts"] = BuildJsonArray(
+            new JsonObject
+            {
+                ["name"] = "share",
+                ["mountPath"] = "/share"
+            },
+            new JsonObject
+            {
+                ["name"] = "pulumi",
+                ["mountPath"] = PulumiHomePath
+            },
+            new JsonObject
+            {
+                ["name"] = "tmp",
+                ["mountPath"] = "/tmp"
+            },
+            new JsonObject
+            {
+                ["name"] = "npmrc",
+                ["mountPath"] = $"{PulumiHomePath}/.npmrc",
+                ["subPath"] = ".npmrc",
+                ["readOnly"] = true
+            });
+        ProvisioningCommonTools.EnsureProxyEnv(container, config);
     }
 
     /// <summary>
