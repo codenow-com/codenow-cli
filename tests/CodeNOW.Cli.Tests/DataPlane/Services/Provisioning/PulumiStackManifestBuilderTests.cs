@@ -98,6 +98,41 @@ public class PulumiStackManifestBuilderTests
         Assert.Equal("dev", fluxSource["dir"]!.GetValue<string>());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BuildStack_AddsScmSystemUrlAndAuthMethodSecretRefs(bool fluxEnabled)
+    {
+        var builder = BuildBuilder();
+        var config = new OperatorConfig
+        {
+            Environment = { Name = "dev" },
+            Kubernetes = { Namespaces = { System = { Name = "system" } } },
+            Scm =
+            {
+                Url = "https://git.example.com/repo",
+                AuthenticationMethod = ScmAuthenticationMethod.AccessToken,
+                AccessToken = "token"
+            },
+            FluxCD = new FluxCDConfig { Enabled = fluxEnabled }
+        };
+
+        var stack = builder.BuildStack(config, "sa");
+        var secretsRef = stack["spec"]!.AsObject()["secretsRef"]!.AsObject();
+
+        AssertConfigSecretRef(secretsRef["cn:scm.system.url"]!.AsObject(), DataPlaneConstants.DataPlaneConfigKeyScmSystemUrl);
+        AssertConfigSecretRef(
+            secretsRef["cn:scm.system.auth.method"]!.AsObject(),
+            DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthMethod);
+    }
+
+    private static void AssertConfigSecretRef(JsonObject secretRef, string key)
+    {
+        Assert.Equal("Secret", secretRef["type"]!.GetValue<string>());
+        Assert.Equal(DataPlaneConstants.OperatorConfigSecretName, secretRef["secret"]!["name"]!.GetValue<string>());
+        Assert.Equal(key, secretRef["secret"]!["key"]!.GetValue<string>());
+    }
+
     [Fact]
     public void BuildStack_UsesFileBackendWhenS3Disabled()
     {

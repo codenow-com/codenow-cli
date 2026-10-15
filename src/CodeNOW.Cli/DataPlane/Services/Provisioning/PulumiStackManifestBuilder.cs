@@ -463,6 +463,8 @@ internal sealed class PulumiStackManifestBuilder
             }
         }
 
+        AddSecretEnvRef(DataPlaneConstants.DataPlaneConfigKeyScmSystemUrl);
+        AddSecretEnvRef(DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthMethod);
         if (!string.IsNullOrWhiteSpace(config.Scm.AccessToken))
             AddSecretEnvRef(DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthToken);
         if (!string.IsNullOrWhiteSpace(config.Scm.Password))

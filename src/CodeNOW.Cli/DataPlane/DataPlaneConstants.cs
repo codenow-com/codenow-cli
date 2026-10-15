@@ -53,6 +53,14 @@ public static class DataPlaneConstants
     /// </summary>
     public const string DataPlaneConfigKeyScmSystemAuthUsername = "cn_scm_system_auth_username";
     /// <summary>
+    /// SCM repository URL for system integrations.
+    /// </summary>
+    public const string DataPlaneConfigKeyScmSystemUrl = "cn_scm_system_url";
+    /// <summary>
+    /// SCM authentication method for system integrations: AccessToken or UsernamePassword.
+    /// </summary>
+    public const string DataPlaneConfigKeyScmSystemAuthMethod = "cn_scm_system_auth_method";
+    /// <summary>
     /// Pulumi passphrase used to encrypt state.
     /// </summary>
     public const string DataPlaneConfigKeyPulumiPassphrase = "cn_pulumi_passphrase";

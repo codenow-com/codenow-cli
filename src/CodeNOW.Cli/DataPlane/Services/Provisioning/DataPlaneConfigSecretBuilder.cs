@@ -58,6 +58,9 @@ public sealed class DataPlaneConfigSecretBuilder
 
         var data = new Dictionary<string, byte[]>();
 
+        data[DataPlaneConstants.DataPlaneConfigKeyScmSystemUrl] = Encoding.UTF8.GetBytes(config.Scm.Url);
+        data[DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthMethod] =
+            Encoding.UTF8.GetBytes(config.Scm.AuthenticationMethod.ToString());
         if (!string.IsNullOrWhiteSpace(token))
             data[DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthToken] = Encoding.UTF8.GetBytes(token);
         if (!string.IsNullOrWhiteSpace(password))

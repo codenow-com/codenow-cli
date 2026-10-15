@@ -57,6 +57,29 @@ public class DataPlaneConfigSecretBuilderTests
             GetString(data, DataPlaneConstants.DataPlaneConfigKeyNpmrc));
     }
 
+    [Theory]
+    [InlineData(ScmAuthenticationMethod.AccessToken)]
+    [InlineData(ScmAuthenticationMethod.UsernamePassword)]
+    public void Build_AddsScmSystemUrlAndAuthMethodForEveryAuthenticationMethod(ScmAuthenticationMethod authenticationMethod)
+    {
+        var config = new OperatorConfig
+        {
+            Scm =
+            {
+                Url = "https://git.example.com/repo.git",
+                AuthenticationMethod = authenticationMethod,
+                AccessToken = authenticationMethod == ScmAuthenticationMethod.AccessToken ? "token" : "",
+                Username = authenticationMethod == ScmAuthenticationMethod.UsernamePassword ? "user" : "",
+                Password = authenticationMethod == ScmAuthenticationMethod.UsernamePassword ? "pass" : ""
+            }
+        };
+
+        var data = new DataPlaneConfigSecretBuilder().Build(config).Data!;
+
+        Assert.Equal("https://git.example.com/repo.git", GetString(data, DataPlaneConstants.DataPlaneConfigKeyScmSystemUrl));
+        Assert.Equal(authenticationMethod.ToString(), GetString(data, DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthMethod));
+    }
+
     [Fact]
     public void Build_UsesAccessTokenNpmrcForExistingConfigWithoutAuthenticationMethod()
     {
