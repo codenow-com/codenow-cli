@@ -24,8 +24,8 @@ public sealed record InstallConfig
     [JsonPropertyName("controlPlaneUrl")] public string? ControlPlaneUrl { get; init; }
     [JsonPropertyName("authorizationToken")] public string? AuthorizationToken { get; init; }
     [JsonPropertyName("imagePullSecret")] public string? ImagePullSecret { get; init; }
-    [JsonPropertyName("containerRegistryHostname")] public string? ContainerRegistryHostname { get; init; }
-    [JsonPropertyName("containerRegistry")] public InstallRegistryCredentials? ContainerRegistry { get; init; }
+    [JsonPropertyName("containerRegistrySystemHostname")] public string? ContainerRegistrySystemHostname { get; init; }
+    [JsonPropertyName("containerRegistrySystem")] public InstallRegistryCredentials? ContainerRegistrySystem { get; init; }
     [JsonPropertyName("httpProxy")] public InstallHttpProxy? HttpProxy { get; init; }
     [JsonPropertyName("namespaceName")] public string? NamespaceName { get; init; }
 }

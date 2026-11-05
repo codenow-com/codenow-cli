@@ -68,19 +68,19 @@ public static partial class InstallConfigLoader
         if (string.IsNullOrEmpty(config.AuthorizationToken))
             throw new InstallConfigException("authorizationToken is required.");
 
-        if (!IsRegistryHostname(config.ContainerRegistryHostname))
-            throw new InstallConfigException("containerRegistryHostname is required and must be a DNS name, IPv4 or bracketed IPv6 address with an optional port.");
+        if (!IsRegistryHostname(config.ContainerRegistrySystemHostname))
+            throw new InstallConfigException("containerRegistrySystemHostname is required and must be a DNS name, IPv4 or bracketed IPv6 address with an optional port.");
 
         var hasSecret = config.ImagePullSecret is not null;
-        var hasCredentials = config.ContainerRegistry is not null;
+        var hasCredentials = config.ContainerRegistrySystem is not null;
         if (hasSecret == hasCredentials)
-            throw new InstallConfigException("Set exactly one of imagePullSecret or containerRegistry.");
+            throw new InstallConfigException("Set exactly one of imagePullSecret or containerRegistrySystem.");
 
         if (hasSecret && (config.ImagePullSecret!.Length > 253 || !DnsSubdomain().IsMatch(config.ImagePullSecret)))
             throw new InstallConfigException("imagePullSecret is not a valid Secret name.");
 
-        if (hasCredentials && (string.IsNullOrEmpty(config.ContainerRegistry!.Username) || string.IsNullOrEmpty(config.ContainerRegistry.Password)))
-            throw new InstallConfigException("containerRegistry requires username and password.");
+        if (hasCredentials && (string.IsNullOrEmpty(config.ContainerRegistrySystem!.Username) || string.IsNullOrEmpty(config.ContainerRegistrySystem.Password)))
+            throw new InstallConfigException("containerRegistrySystem requires username and password.");
 
         if (config.NamespaceName is { } name && (name.Length > 63 || !DnsLabel().IsMatch(name)))
             throw new InstallConfigException("namespaceName must be a lowercase DNS label of at most 63 characters.");

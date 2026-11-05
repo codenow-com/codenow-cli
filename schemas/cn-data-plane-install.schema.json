@@ -3,14 +3,14 @@
   "title": "CodeNOW Data Plane Installation Configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": ["controlPlaneUrl", "authorizationToken", "containerRegistryHostname"],
+  "required": ["controlPlaneUrl", "authorizationToken", "containerRegistrySystemHostname"],
   "properties": {
     "$schema": { "type": "string", "format": "uri-reference" },
     "controlPlaneUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
     "authorizationToken": { "type": "string", "minLength": 1 },
     "imagePullSecret": { "type": "string", "minLength": 1 },
-    "containerRegistryHostname": { "type": "string", "minLength": 1 },
-    "containerRegistry": {
+    "containerRegistrySystemHostname": { "type": "string", "minLength": 1 },
+    "containerRegistrySystem": {
       "type": "object",
       "additionalProperties": false,
       "required": ["username", "password"],
@@ -38,7 +38,7 @@
     }
   },
   "oneOf": [
-    { "required": ["imagePullSecret"], "not": { "required": ["containerRegistry"] } },
-    { "required": ["containerRegistry"], "not": { "required": ["imagePullSecret"] } }
+    { "required": ["imagePullSecret"], "not": { "required": ["containerRegistrySystem"] } },
+    { "required": ["containerRegistrySystem"], "not": { "required": ["imagePullSecret"] } }
   ]
 }

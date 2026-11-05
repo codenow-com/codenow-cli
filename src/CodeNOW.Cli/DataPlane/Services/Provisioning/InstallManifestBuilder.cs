@@ -28,7 +28,7 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
     public string EffectivePullSecret => config.ImagePullSecret ?? PullSecretName;
 
     /// <summary>The initial and recovery launch reference; never resolved to a digest.</summary>
-    public string LatestImage => $"{config.ContainerRegistryHostname}/{ControllerRepository}:latest";
+    public string LatestImage => $"{config.ContainerRegistrySystemHostname}/{ControllerRepository}:latest";
 
     public static Dictionary<string, string> Labels(string instance, string name, string? component)
     {
@@ -68,13 +68,13 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
 
     public V1Secret PullSecret()
     {
-        var credentials = config.ContainerRegistry!;
+        var credentials = config.ContainerRegistrySystem!;
         var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{credentials.Username}:{credentials.Password}"));
         var document = new JsonObject
         {
             ["auths"] = new JsonObject
             {
-                [config.ContainerRegistryHostname!] = new JsonObject { ["auth"] = auth },
+                [config.ContainerRegistrySystemHostname!] = new JsonObject { ["auth"] = auth },
             },
         };
 
@@ -103,7 +103,7 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
 
         document["controlPlaneUrl"] = config.ControlPlaneUrl;
         document["imagePullSecret"] = EffectivePullSecret;
-        document["containerRegistryHostname"] = config.ContainerRegistryHostname;
+        document["containerRegistrySystemHostname"] = config.ContainerRegistrySystemHostname;
         if (config.HttpProxy is { } proxy)
         {
             document["httpProxy"] = new JsonObject

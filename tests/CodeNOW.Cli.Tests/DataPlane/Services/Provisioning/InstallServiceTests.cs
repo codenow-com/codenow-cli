@@ -20,8 +20,8 @@ public class InstallServiceTests
     {
       "controlPlaneUrl": "https://cloud.codenow.com",
       "authorizationToken": "tok",
-      "containerRegistryHostname": "registry.example",
-      "containerRegistry": { "username": "u", "password": "p" }
+      "containerRegistrySystemHostname": "registry.example",
+      "containerRegistrySystem": { "username": "u", "password": "p" }
     }
     """;
 
@@ -44,21 +44,21 @@ public class InstallServiceTests
     {
         Assert.Equal("cn-data-plane-system", Config().NamespaceName);
 
-        var missing = Minimal.Replace("\"containerRegistryHostname\": \"registry.example\",", string.Empty);
+        var missing = Minimal.Replace("\"containerRegistrySystemHostname\": \"registry.example\",", string.Empty);
         Assert.Throws<InstallConfigException>(() => Config(missing));
     }
 
     [Theory]
-    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistryHostname":"r","imagePullSecret":"s"}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"","containerRegistryHostname":"r","imagePullSecret":"s"}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistryHostname":"r"}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistryHostname":"r","imagePullSecret":"s","containerRegistry":{"username":"u","password":"p"}}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistryHostname":"r","containerRegistry":{"username":"u"}}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistryHostname":"https://r","imagePullSecret":"s"}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistryHostname":"r","imagePullSecret":"s","unknown":1}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistryHostname":"r","imagePullSecret":"s","namespaceName":"Bad_Name"}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistryHostname":"r","imagePullSecret":"s","httpProxy":{"hostname":"http://p","port":1}}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistryHostname":"r","imagePullSecret":"s","httpProxy":{"hostname":"p","port":70000}}""")]
+    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s"}""")]
+    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"","containerRegistrySystemHostname":"r","imagePullSecret":"s"}""")]
+    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r"}""")]
+    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","containerRegistrySystem":{"username":"u","password":"p"}}""")]
+    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","containerRegistrySystem":{"username":"u"}}""")]
+    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"https://r","imagePullSecret":"s"}""")]
+    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","unknown":1}""")]
+    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","namespaceName":"Bad_Name"}""")]
+    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","httpProxy":{"hostname":"http://p","port":1}}""")]
+    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","httpProxy":{"hostname":"p","port":70000}}""")]
     public void InvalidInputIsRejected(string json)
     {
         Assert.Throws<InstallConfigException>(() => Config(json));
@@ -177,7 +177,7 @@ public class InstallServiceTests
     [Fact]
     public async Task ExistingPullSecretIsReusedUnchanged()
     {
-        const string json = """{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistryHostname":"r","imagePullSecret":"mine"}""";
+        const string json = """{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"mine"}""";
         client.Install.Secrets.Add("mine");
 
         await Service().InstallAsync(Config(json), recoverController: false);
