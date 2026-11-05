@@ -18,14 +18,30 @@ namespace CodeNOW.Cli.DataPlane.Console.Commands;
 [HideBanner]
 public class DashboardCommand(
     IManagementService managementService,
-    KubernetesConnectionGuard connectionGuard)
+    KubernetesConnectionGuard connectionGuard,
+    CodeNOW.Cli.Adapters.Kubernetes.IKubernetesClientFactory clientFactory,
+    CodeNOW.Cli.Adapters.Kubernetes.KubernetesConnectionOptions connectionOptions,
+    Microsoft.Extensions.Logging.ILogger<DashboardCommand> logger)
 {
-    /// <summary>Displays a management dashboard with the current state of the Data Plane.</summary>
+    /// <summary>Displays a management dashboard for an operator-managed Data Plane installation.</summary>
+    /// <param name="namespaceName">Installation namespace, used to detect an unsupported installation model.</param>
+    /// <returns>Process exit code.</returns>
     [Command("dashboard")]
-    public async Task Dashboard()
+    public async Task<int> Dashboard(string namespaceName = DataPlaneConstants.DefaultSystemNamespace)
     {
         if (!await connectionGuard.EnsureConnectedAsync())
-            return;
+            return 1;
+
+        var identity = await clientFactory.Create(logger, connectionOptions).Install.ReadConfigMapAsync(
+            CodeNOW.Cli.DataPlane.Services.Provisioning.InstallManifestBuilder.IdentityName, namespaceName);
+        if (identity is not null)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]Namespace {namespaceName} uses the Update Controller model, which cn dp dashboard does not support.[/]");
+            foreach (var line in InstallCommand.SuccessLines(namespaceName).Skip(2))
+                AnsiConsole.WriteLine(line);
+
+            return 1;
+        }
 
         var currentView = LogView.Workspace;
         var options = new DashboardOptions(
@@ -137,6 +153,8 @@ public class DashboardCommand(
                     await Task.Delay(100);
                 }
             });
+
+        return 0;
     }
 
     private static async Task UpdateTopAsync(IManagementService managementService, DashboardState state)

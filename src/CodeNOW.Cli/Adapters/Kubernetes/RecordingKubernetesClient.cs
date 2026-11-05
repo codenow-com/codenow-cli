@@ -36,6 +36,9 @@ internal sealed class RecordingKubernetesClient : IKubernetesClient
     public IKubernetesApiextensionsClient ApiextensionsV1 { get; }
     public IKubernetesVersionClient Version { get; }
 
+    /// <summary>Recording covers bootstrap only; installation does not run against this client.</summary>
+    public IKubernetesInstallClient Install => throw new NotSupportedException();
+
     public RecordingKubernetesClient()
     {
         CoreV1 = new RecordingCoreV1Client(this);

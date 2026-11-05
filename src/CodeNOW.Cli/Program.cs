@@ -38,6 +38,7 @@ public static class Program
         var bannerPolicy = new BannerVisibilityPolicy(
         [
             new CommandDescriptor("dp", "bootstrap", HideBanner: hideBanner),
+                new CommandDescriptor("dp", "install", HideBanner: false),
                 new CommandDescriptor("dp", "dashboard", HideBanner: true),
                 new CommandDescriptor("dp", "config", HideBanner: false)
         ]);
@@ -88,6 +89,7 @@ public static class Program
             services.AddSingleton<PulumiStackManifestBuilder>();
             services.AddSingleton<IPulumiStackProvisioner, PulumiStackProvisioner>();
             services.AddSingleton<IBootstrapService, BootstrapService>();
+            services.AddSingleton<InstallService>();
             services.AddSingleton<IManagementService, ManagementService>();
             services.AddSingleton<OperatorConfigService>();
             services.AddSingleton<DataPlane.Console.Supports.KubernetesConnectionGuard>();
@@ -106,6 +108,7 @@ public static class Program
         });
 
         app.Add<BootstrapCommand>("dp");
+        app.Add<InstallCommand>("dp");
         app.Add<DashboardCommand>("dp");
         app.Add<ConfigCommand>("dp");
         app.Run(args);

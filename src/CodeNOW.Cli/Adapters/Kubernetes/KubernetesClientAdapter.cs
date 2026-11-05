@@ -24,6 +24,59 @@ public sealed class KubernetesClientAdapter : IKubernetesClient
         CustomObjects = new CustomObjectsAdapter(client);
         ApiextensionsV1 = new ApiextensionsAdapter(client);
         Version = new VersionAdapter(client);
+        Install = new InstallAdapter(client);
+    }
+
+    /// <inheritdoc />
+    public IKubernetesInstallClient Install { get; }
+
+    /// <summary>
+    /// Wraps the reads and creates used by installation.
+    /// </summary>
+    private sealed class InstallAdapter(K8sClient client) : IKubernetesInstallClient
+    {
+        public async Task<bool> NamespaceExistsAsync(string name)
+            => await OrNull(() => client.CoreV1.ReadNamespaceAsync(name)) is not null;
+
+        public Task CreateNamespaceAsync(string name)
+            => client.CoreV1.CreateNamespaceAsync(new V1Namespace { Metadata = new V1ObjectMeta { Name = name } });
+
+        public Task<V1ConfigMap?> ReadConfigMapAsync(string name, string namespaceParameter)
+            => OrNull(() => client.CoreV1.ReadNamespacedConfigMapAsync(name, namespaceParameter));
+
+        public async Task<bool> TryCreateConfigMapAsync(V1ConfigMap body, string namespaceParameter)
+        {
+            try
+            {
+                await client.CoreV1.CreateNamespacedConfigMapAsync(body, namespaceParameter);
+                return true;
+            }
+            catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                return false;
+            }
+        }
+
+        public async Task<bool> SecretExistsAsync(string name, string namespaceParameter)
+            => await OrNull(() => client.CoreV1.ReadNamespacedSecretAsync(name, namespaceParameter)) is not null;
+
+        public Task<V1CronJob?> ReadCronJobAsync(string name, string namespaceParameter)
+            => OrNull(() => client.BatchV1.ReadNamespacedCronJobAsync(name, namespaceParameter));
+
+        public Task<V1ClusterRoleBinding?> ReadClusterRoleBindingAsync(string name)
+            => OrNull(() => client.RbacAuthorizationV1.ReadClusterRoleBindingAsync(name));
+
+        private static async Task<T?> OrNull<T>(Func<Task<T>> read) where T : class
+        {
+            try
+            {
+                return await read();
+            }
+            catch (k8s.Autorest.HttpOperationException ex) when (ex.Response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+        }
     }
 
     /// <inheritdoc />

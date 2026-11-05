@@ -36,6 +36,9 @@ public static class KubernetesExtnsions
                 V1ClusterRole => ("ClusterRole", "rbac.authorization.k8s.io/v1"),
                 V1ClusterRoleBinding => ("ClusterRoleBinding", "rbac.authorization.k8s.io/v1"),
                 V1CustomResourceDefinition => ("CustomResourceDefinition", "apiextensions.k8s.io/v1"),
+                V1ConfigMap => ("ConfigMap", "v1"),
+                V1Secret => ("Secret", "v1"),
+                V1CronJob => ("CronJob", "batch/v1"),
                 _ => (kind, apiVersion)
             };
 
@@ -120,6 +123,33 @@ public static class KubernetesExtnsions
                 await client.ApiextensionsV1.PatchCustomResourceDefinitionAsync(
                     patch,
                     name,
+                    fieldManager: KubernetesConstants.FieldManager,
+                    force: true);
+                break;
+
+            case "ConfigMap":
+                await client.CoreV1.PatchNamespacedConfigMapAsync(
+                    patch,
+                    name,
+                    ns,
+                    fieldManager: KubernetesConstants.FieldManager,
+                    force: true);
+                break;
+
+            case "Secret":
+                await client.CoreV1.PatchNamespacedSecretAsync(
+                    patch,
+                    name,
+                    ns,
+                    fieldManager: KubernetesConstants.FieldManager,
+                    force: true);
+                break;
+
+            case "CronJob":
+                await client.BatchV1.PatchNamespacedCronJobAsync(
+                    patch,
+                    name,
+                    ns,
                     fieldManager: KubernetesConstants.FieldManager,
                     force: true);
                 break;

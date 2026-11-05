@@ -32,6 +32,9 @@ public sealed class FakeKubernetesClient : IKubernetesClient
     public FakeVersionClient Version { get; }
     IKubernetesVersionClient IKubernetesClient.Version => Version;
 
+    public FakeInstallClient Install { get; } = new();
+    IKubernetesInstallClient IKubernetesClient.Install => Install;
+
     public List<IKubernetesObject<V1ObjectMeta>> AppliedObjects { get; } = new();
 
     public Task ApplyAsync(IKubernetesObject<V1ObjectMeta> kubeObj)
@@ -39,6 +42,36 @@ public sealed class FakeKubernetesClient : IKubernetesClient
         AppliedObjects.Add(kubeObj);
         return Task.CompletedTask;
     }
+}
+
+public sealed class FakeInstallClient : IKubernetesInstallClient
+{
+    public HashSet<string> Namespaces { get; } = new();
+    public Dictionary<string, V1ConfigMap> ConfigMaps { get; } = new();
+    public HashSet<string> Secrets { get; } = new();
+    public V1CronJob? CronJob { get; set; }
+    public V1ClusterRoleBinding? ClusterRoleBinding { get; set; }
+
+    public Task<bool> NamespaceExistsAsync(string name) => Task.FromResult(Namespaces.Contains(name));
+
+    public Task CreateNamespaceAsync(string name)
+    {
+        Namespaces.Add(name);
+        return Task.CompletedTask;
+    }
+
+    public Task<V1ConfigMap?> ReadConfigMapAsync(string name, string namespaceParameter)
+        => Task.FromResult(ConfigMaps.GetValueOrDefault(name));
+
+    public Task<bool> TryCreateConfigMapAsync(V1ConfigMap body, string namespaceParameter)
+        => Task.FromResult(ConfigMaps.TryAdd(body.Metadata.Name, body));
+
+    public Task<bool> SecretExistsAsync(string name, string namespaceParameter)
+        => Task.FromResult(Secrets.Contains(name));
+
+    public Task<V1CronJob?> ReadCronJobAsync(string name, string namespaceParameter) => Task.FromResult(CronJob);
+
+    public Task<V1ClusterRoleBinding?> ReadClusterRoleBindingAsync(string name) => Task.FromResult(ClusterRoleBinding);
 }
 
 public sealed class FakeCoreV1Client : IKubernetesCoreClient

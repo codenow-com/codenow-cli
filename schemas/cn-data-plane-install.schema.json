@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CodeNOW Data Plane Installation Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["controlPlaneUrl", "authorizationToken", "containerRegistryHostname"],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri-reference" },
+    "controlPlaneUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "authorizationToken": { "type": "string", "minLength": 1 },
+    "imagePullSecret": { "type": "string", "minLength": 1 },
+    "containerRegistryHostname": { "type": "string", "minLength": 1 },
+    "containerRegistry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["username", "password"],
+      "properties": {
+        "username": { "type": "string", "minLength": 1 },
+        "password": { "type": "string", "minLength": 1 }
+      }
+    },
+    "httpProxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname", "port"],
+      "properties": {
+        "hostname": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "noProxyHostnames": { "type": "string" }
+      }
+    },
+    "namespaceName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+      "default": "cn-data-plane-system"
+    }
+  },
+  "oneOf": [
+    { "required": ["imagePullSecret"], "not": { "required": ["containerRegistry"] } },
+    { "required": ["containerRegistry"], "not": { "required": ["imagePullSecret"] } }
+  ]
+}

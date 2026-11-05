@@ -1,0 +1,40 @@
+{
+  "description": "Copy of deployment/update-controller/src/CodeNow.DataPlane.UpdateController/Rbac/deployer-profile.json from codenow-data-plane. The Installer grants these rules to the Controller so Kubernetes delegation checks pass when it provisions the Deployer.",
+  "clusterRules": [
+    {
+      "source": "argo-cd chart: argocd-application-controller ClusterRole. Effectively cluster-wide administrator; literal * verbs cover escalate, bind and impersonate.",
+      "apiGroups": ["*"],
+      "resources": ["*"],
+      "verbs": ["*"]
+    },
+    {
+      "source": "argo-cd chart: argocd-application-controller ClusterRole",
+      "nonResourceURLs": ["*"],
+      "verbs": ["*"]
+    },
+    {
+      "source": "pinniped concierge: impersonation proxy ClusterRole",
+      "apiGroups": [""],
+      "resources": ["users", "groups", "serviceaccounts"],
+      "verbs": ["impersonate"]
+    },
+    {
+      "source": "pinniped concierge: impersonation proxy ClusterRole",
+      "apiGroups": ["authentication.k8s.io"],
+      "resources": ["*"],
+      "verbs": ["impersonate"]
+    },
+    {
+      "source": "cert-manager chart: approve and CSR signing ClusterRoles",
+      "apiGroups": ["cert-manager.io", "certificates.k8s.io"],
+      "resources": ["signers"],
+      "verbs": ["approve", "sign"]
+    },
+    {
+      "source": "cert-manager chart: CSR signing ClusterRole",
+      "apiGroups": ["certificates.k8s.io"],
+      "resources": ["certificatesigningrequests", "certificatesigningrequests/status"],
+      "verbs": ["get", "list", "watch", "update", "patch"]
+    }
+  ]
+}

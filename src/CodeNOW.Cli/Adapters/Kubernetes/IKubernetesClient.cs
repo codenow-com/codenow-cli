@@ -18,6 +18,8 @@ public interface IKubernetesClient
     IKubernetesApiextensionsClient ApiextensionsV1 { get; }
     /// <summary>Version API surface.</summary>
     IKubernetesVersionClient Version { get; }
+    /// <summary>Reads and creates used by <c>cn dp install</c>; a missing object is null or false.</summary>
+    IKubernetesInstallClient Install { get; }
 
     /// <summary>
     /// Applies the given Kubernetes object using server-side apply.
@@ -106,6 +108,19 @@ public interface IKubernetesApiextensionsClient
 /// <summary>
 /// Version API subset used by the application.
 /// </summary>
+public interface IKubernetesInstallClient
+{
+    Task<bool> NamespaceExistsAsync(string name);
+    Task CreateNamespaceAsync(string name);
+    Task<V1ConfigMap?> ReadConfigMapAsync(string name, string namespaceParameter);
+
+    /// <summary>Returns false when another writer created the ConfigMap first.</summary>
+    Task<bool> TryCreateConfigMapAsync(V1ConfigMap body, string namespaceParameter);
+    Task<bool> SecretExistsAsync(string name, string namespaceParameter);
+    Task<V1CronJob?> ReadCronJobAsync(string name, string namespaceParameter);
+    Task<V1ClusterRoleBinding?> ReadClusterRoleBindingAsync(string name);
+}
+
 public interface IKubernetesVersionClient
 {
     Task<VersionInfo> GetCodeAsync(CancellationToken cancellationToken = default);
