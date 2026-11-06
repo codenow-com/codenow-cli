@@ -71,6 +71,8 @@ runtime pulls images, so configure its proxy separately on each node.
 
 ## What It Creates
 
+The installation namespace, if it does not exist.
+
 In the installation namespace: ConfigMaps `cn-dp-identity` and
 `cn-dp-update-controller-config`, Secret `cn-dp-authorization`, the pull Secret,
 ServiceAccount, Role, RoleBinding and CronJob `cn-dp-update-controller`. In the

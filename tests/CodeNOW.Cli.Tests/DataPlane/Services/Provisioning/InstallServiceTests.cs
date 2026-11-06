@@ -277,6 +277,14 @@ public class InstallServiceTests
     }
 
     [Fact]
+    public async Task MissingNamespaceIsCreated()
+    {
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        Assert.Equal("cn-data-plane-system", Assert.Single(client.Install.Namespaces));
+    }
+
+    [Fact]
     public async Task ExistingNamespaceIsReused()
     {
         client.Install.Namespaces.Add("cn-data-plane-system");
