@@ -23,6 +23,11 @@ stack resources in the cluster. Make sure the Data Plane is bootstrapped.
 If the Data Plane is not installed yet, complete the bootstrap flow first
 using the [bootstrap command](bootstrap.md).
 
+The dashboard supports operator-managed installations only. For an installation
+made with [dp install](install.md), it exits with an error and prints `kubectl`
+commands to use instead. Use `--namespace-name` to target a namespace other than
+`cn-data-plane-system`.
+
 ## Usage
 
 Run the command with:
