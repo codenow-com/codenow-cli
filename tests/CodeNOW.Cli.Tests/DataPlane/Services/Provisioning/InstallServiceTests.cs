@@ -209,6 +209,85 @@ public class InstallServiceTests
     }
 
     [Fact]
+    public async Task RerunPersistsTheSuppliedHostnameWithoutRewritingTheImage()
+    {
+        const string pinned = "old.example/codenow/data-plane-update-controller@sha256:abc";
+        client.Install.ConfigMaps["cn-dp-identity"] = new V1ConfigMap { Data = new Dictionary<string, string> { ["clusterInstanceId"] = Instance } };
+        client.Install.CronJob = new InstallManifestBuilder(Config(), Instance).CronJob(pinned);
+
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        Assert.Contains("\"containerRegistrySystemHostname\":\"registry.example\"", client.AppliedObjects.OfType<V1ConfigMap>().Single().Data["config.json"]);
+        Assert.Equal(pinned, Applied<V1CronJob>().Spec.JobTemplate.Spec.Template.Spec.Containers.Single().Image);
+    }
+
+    [Fact]
+    public async Task AuthorizationAndRegistryCredentialsStaySeparate()
+    {
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        var secrets = client.AppliedObjects.OfType<V1Secret>().ToList();
+        var authorization = secrets.Single(s => s.Metadata.Name == "cn-dp-authorization");
+        var pull = secrets.Single(s => s.Metadata.Name == "cn-system-image-pull-secret");
+
+        Assert.Equal("token", Assert.Single(authorization.Data).Key);
+        Assert.Equal(".dockerconfigjson", Assert.Single(pull.Data).Key);
+        Assert.DoesNotContain("tok", Encoding.UTF8.GetString(pull.Data[".dockerconfigjson"]));
+    }
+
+    [Fact]
+    public async Task ControllerPodMeetsRestrictedAdmissionWithDocumentedResources()
+    {
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        var pod = Applied<V1CronJob>().Spec.JobTemplate.Spec.Template.Spec;
+        var container = pod.Containers.Single();
+
+        Assert.True(pod.SecurityContext.RunAsNonRoot);
+        Assert.Equal("RuntimeDefault", pod.SecurityContext.SeccompProfile.Type);
+        Assert.False(container.SecurityContext.AllowPrivilegeEscalation);
+        Assert.Equal("ALL", container.SecurityContext.Capabilities.Drop.Single());
+        Assert.Equal(("100m", "128Mi"), (container.Resources.Requests["cpu"].ToString(), container.Resources.Requests["memory"].ToString()));
+        Assert.Equal(("500m", "256Mi"), (container.Resources.Limits["cpu"].ToString(), container.Resources.Limits["memory"].ToString()));
+    }
+
+    [Fact]
+    public async Task InstallCreatesNoJobAndNoDeployerResources()
+    {
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        Assert.DoesNotContain(client.AppliedObjects, resource => resource is V1Job);
+        Assert.DoesNotContain(client.AppliedObjects, resource => resource.Metadata.Name.Contains("deployer") || resource.Metadata.Name.Contains("pulumi"));
+        Assert.DoesNotContain(client.AppliedObjects, resource => resource.Metadata.Name == "cn-dp-status");
+    }
+
+    [Fact]
+    public async Task ExecutionTemplatesCarryTheOwnershipLabels()
+    {
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        var cronJob = Applied<V1CronJob>();
+        foreach (var labels in new[] { cronJob.Metadata.Labels, cronJob.Spec.JobTemplate.Metadata.Labels, cronJob.Spec.JobTemplate.Spec.Template.Metadata.Labels })
+        {
+            Assert.Equal("cn-dp-update-controller", labels["app.kubernetes.io/name"]);
+            Assert.Equal("update-controller", labels["app.kubernetes.io/component"]);
+            Assert.Equal("cn-cli", labels["app.kubernetes.io/managed-by"]);
+            Assert.True(Guid.TryParse(labels["app.kubernetes.io/instance"], out _));
+        }
+    }
+
+    [Fact]
+    public async Task ExistingNamespaceIsReused()
+    {
+        client.Install.Namespaces.Add("cn-data-plane-system");
+
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        Assert.DoesNotContain(client.AppliedObjects, resource => resource is V1Namespace);
+        Assert.Equal("cn-data-plane-system", Assert.Single(client.Install.Namespaces));
+    }
+
+    [Fact]
     public void SuccessOutputUsesTheActualNamespace()
     {
         var lines = InstallCommand.SuccessLines("custom-ns").ToList();
