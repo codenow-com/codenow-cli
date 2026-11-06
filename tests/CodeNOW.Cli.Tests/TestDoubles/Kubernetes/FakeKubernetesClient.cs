@@ -60,11 +60,22 @@ public sealed class FakeInstallClient : IKubernetesInstallClient
         return Task.CompletedTask;
     }
 
+    public List<string> ConfigMapReadNamespaces { get; } = new();
+    public V1ConfigMap? ConcurrentlyCreatedConfigMap { get; set; }
+
     public Task<V1ConfigMap?> ReadConfigMapAsync(string name, string namespaceParameter)
-        => Task.FromResult(ConfigMaps.GetValueOrDefault(name));
+    {
+        ConfigMapReadNamespaces.Add(namespaceParameter);
+        return Task.FromResult(ConfigMaps.GetValueOrDefault(name));
+    }
 
     public Task<bool> TryCreateConfigMapAsync(V1ConfigMap body, string namespaceParameter)
-        => Task.FromResult(ConfigMaps.TryAdd(body.Metadata.Name, body));
+    {
+        if (ConcurrentlyCreatedConfigMap is { } winner)
+            ConfigMaps[body.Metadata.Name] = winner;
+
+        return Task.FromResult(ConfigMaps.TryAdd(body.Metadata.Name, body));
+    }
 
     public Task<bool> SecretExistsAsync(string name, string namespaceParameter)
         => Task.FromResult(Secrets.Contains(name));

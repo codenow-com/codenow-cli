@@ -42,8 +42,9 @@ public class InstallCommand(InstallService installService, KubernetesConnectionG
             return 1;
         }
 
+        // Not through AnsiConsole, which wraps long lines and would break the commands for copying.
         foreach (var line in SuccessLines(document.NamespaceName!))
-            AnsiConsole.WriteLine(line);
+            global::System.Console.Out.WriteLine(line);
 
         return 0;
     }

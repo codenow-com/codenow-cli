@@ -288,6 +288,94 @@ public class InstallServiceTests
     }
 
     [Fact]
+    public async Task ConcurrentInstallationReusesTheWinningIdentity()
+    {
+        client.Install.ConcurrentlyCreatedConfigMap = new V1ConfigMap { Data = new Dictionary<string, string> { ["clusterInstanceId"] = Instance } };
+
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        Assert.Equal(Instance, Applied<V1CronJob>().Metadata.Labels["app.kubernetes.io/instance"]);
+    }
+
+    [Fact]
+    public async Task RestoredIdentityIsKeptAndAMissingOneIsANewRegistration()
+    {
+        client.Install.ConfigMaps["cn-dp-identity"] = new V1ConfigMap { Data = new Dictionary<string, string> { ["clusterInstanceId"] = Instance } };
+        await Service().InstallAsync(Config(), recoverController: false);
+        Assert.Equal(Instance, Applied<V1CronJob>().Metadata.Labels["app.kubernetes.io/instance"]);
+
+        var clone = new FakeKubernetesClient();
+        await new InstallService(NullLogger<InstallService>.Instance, new Factory(clone), new KubernetesConnectionOptions()).InstallAsync(Config(), recoverController: false);
+
+        var generated = clone.AppliedObjects.OfType<V1CronJob>().Single().Metadata.Labels["app.kubernetes.io/instance"];
+        Assert.NotEqual(Instance, generated);
+        Assert.True(Guid.TryParse(generated, out _));
+    }
+
+    [Fact]
+    public async Task IdentityNeedsNoKubeSystemAccess()
+    {
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        Assert.DoesNotContain("kube-system", client.Install.ConfigMapReadNamespaces);
+    }
+
+    [Fact]
+    public async Task OperatorPodsStopBeforeMutation()
+    {
+        client.CoreV1.ListNamespacedPodAsyncHandler = (_, _, _) => Task.FromResult(new V1PodList { Items = [new V1Pod()] });
+
+        var blocked = await Assert.ThrowsAsync<InstallBlockedException>(() => Service().InstallAsync(Config(), recoverController: false));
+
+        Assert.Contains("transfer state", blocked.Message);
+        Assert.Empty(client.AppliedObjects);
+    }
+
+    [Fact]
+    public async Task ProxyIsPersistedWithTheBypassList()
+    {
+        var json = Minimal.Replace("\"authorizationToken\": \"tok\",", "\"authorizationToken\": \"tok\", \"httpProxy\": {\"hostname\":\"proxy.test\",\"port\":3128,\"noProxyHostnames\":\"a.test,b.test\"},");
+
+        await Service().InstallAsync(Config(json), recoverController: false);
+
+        var config = client.AppliedObjects.OfType<V1ConfigMap>().Single().Data["config.json"];
+        Assert.Contains("\"hostname\":\"proxy.test\"", config);
+        Assert.Contains("\"noProxyHostnames\":\"a.test,b.test\"", config);
+        var env = Applied<V1CronJob>().Spec.JobTemplate.Spec.Template.Spec.Containers.Single().Env;
+        Assert.Equal("http://proxy.test:3128", env.Single(e => e.Name == "HTTP_PROXY").Value);
+        Assert.Equal("a.test,b.test", env.Single(e => e.Name == "NO_PROXY").Value);
+    }
+
+    [Fact]
+    public async Task OmittedProxyAddsNoOverrides()
+    {
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        Assert.DoesNotContain("httpProxy", client.AppliedObjects.OfType<V1ConfigMap>().Single().Data["config.json"]);
+    }
+
+    [Fact]
+    public async Task DashboardDetectsTheModelOnlyInTheTargetNamespace()
+    {
+        Assert.False(await DashboardCommand.UsesUpdateControllerAsync(client.Install, "operator-ns"));
+        Assert.Equal("operator-ns", Assert.Single(client.Install.ConfigMapReadNamespaces));
+
+        client.Install.ConfigMaps["cn-dp-identity"] = new V1ConfigMap();
+        Assert.True(await DashboardCommand.UsesUpdateControllerAsync(client.Install, "controller-ns"));
+    }
+
+    [Fact]
+    public void SuccessOutputCoversCronJobJobsPodsAndLogs()
+    {
+        var commands = InstallCommand.SuccessLines("ns").Where(line => line.Contains("kubectl")).ToList();
+
+        Assert.Contains(commands, line => line.Contains("get cronjob"));
+        Assert.Contains(commands, line => line.Contains("get jobs"));
+        Assert.Contains(commands, line => line.Contains("get pods"));
+        Assert.Equal(2, commands.Count(line => line.Contains(" logs ")));
+    }
+
+    [Fact]
     public void SuccessOutputUsesTheActualNamespace()
     {
         var lines = InstallCommand.SuccessLines("custom-ns").ToList();

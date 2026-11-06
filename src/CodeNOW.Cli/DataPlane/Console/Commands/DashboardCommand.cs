@@ -32,13 +32,11 @@ public class DashboardCommand(
         if (!await connectionGuard.EnsureConnectedAsync())
             return 1;
 
-        var identity = await clientFactory.Create(logger, connectionOptions).Install.ReadConfigMapAsync(
-            CodeNOW.Cli.DataPlane.Services.Provisioning.InstallManifestBuilder.IdentityName, namespaceName);
-        if (identity is not null)
+        if (await UsesUpdateControllerAsync(clientFactory.Create(logger, connectionOptions).Install, namespaceName))
         {
             AnsiConsole.MarkupLineInterpolated($"[red]Namespace {namespaceName} uses the Update Controller model, which cn dp dashboard does not support.[/]");
             foreach (var line in InstallCommand.SuccessLines(namespaceName).Skip(2))
-                AnsiConsole.WriteLine(line);
+                global::System.Console.Out.WriteLine(line);
 
             return 1;
         }
@@ -156,6 +154,10 @@ public class DashboardCommand(
 
         return 0;
     }
+
+    /// <summary>Checks only the targeted namespace, so another installation in the cluster has no effect.</summary>
+    public static async Task<bool> UsesUpdateControllerAsync(CodeNOW.Cli.Adapters.Kubernetes.IKubernetesInstallClient install, string namespaceName) =>
+        await install.ReadConfigMapAsync(CodeNOW.Cli.DataPlane.Services.Provisioning.InstallManifestBuilder.IdentityName, namespaceName) is not null;
 
     private static async Task UpdateTopAsync(IManagementService managementService, DashboardState state)
     {
