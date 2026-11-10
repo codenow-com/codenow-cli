@@ -56,6 +56,7 @@ public class InstallServiceTests
     [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","containerRegistrySystem":{"username":"u"}}""")]
     [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"https://r","imagePullSecret":"s"}""")]
     [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","unknown":1}""")]
+    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","allowInsecureControlPlane":true}""")]
     [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","namespaceName":"Bad_Name"}""")]
     [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","httpProxy":{"hostname":"http://p","port":1}}""")]
     [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","httpProxy":{"hostname":"p","port":70000}}""")]
@@ -130,6 +131,21 @@ public class InstallServiceTests
         Assert.Equal(pinned, cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers.Single().Image);
         Assert.Equal(Instance, cronJob.Metadata.Labels["app.kubernetes.io/instance"]);
         Assert.Contains("\"deploymentMaxAttempts\":9", client.AppliedObjects.OfType<V1ConfigMap>().Single().Data["config.json"]);
+    }
+
+    [Fact]
+    public async Task RerunRemovesInsecureControlPlaneOptIn()
+    {
+        client.Install.ConfigMaps["cn-dp-update-controller-config"] = new V1ConfigMap
+        {
+            Data = new Dictionary<string, string> { ["config.json"] = """{"controlPlaneUrl":"http://mock","allowInsecureControlPlane":true}""" },
+        };
+
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        var json = client.AppliedObjects.OfType<V1ConfigMap>().Single().Data["config.json"];
+        Assert.DoesNotContain("allowInsecureControlPlane", json);
+        Assert.Contains("\"controlPlaneUrl\":\"https://", json);
     }
 
     [Fact]
