@@ -62,8 +62,8 @@ public static partial class InstallConfigLoader
 
     private static void Validate(InstallConfig config)
     {
-        if (!Uri.TryCreate(config.ControlPlaneUrl, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps)
-            throw new InstallConfigException("controlPlaneUrl must be an absolute HTTPS URL.");
+        if (!Uri.TryCreate(config.ControlPlaneUrl, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttp)
+            throw new InstallConfigException("controlPlaneUrl must be an absolute HTTP URL; HTTPS is not supported yet.");
 
         if (string.IsNullOrEmpty(config.AuthorizationToken))
             throw new InstallConfigException("authorizationToken is required.");

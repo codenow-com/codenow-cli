@@ -23,7 +23,8 @@ Use this command for the Update Controller model. The operator model still uses
 - Kubernetes 1.31 or later, and storage for one 10 Gi `ReadWriteOnce` volume.
 - A container registry holding `codenow/data-plane-update-controller` and
   `codenow/data-plane-deployer`, with credentials that can pull them.
-- Outbound HTTPS from the cluster to the Control Plane.
+- Outbound HTTP from the cluster to the Control Plane. HTTPS is not supported yet,
+  so the authorization token travels unencrypted.
 
 ## Usage
 
@@ -48,7 +49,7 @@ changes the cluster.
 
 ```json
 {
-  "controlPlaneUrl": "https://cloud.codenow.com",
+  "controlPlaneUrl": "http://cloud.codenow.com",
   "authorizationToken": "<token>",
   "containerRegistrySystemHostname": "registry.example",
   "containerRegistrySystem": { "username": "<username>", "password": "<password>" }
@@ -57,7 +58,7 @@ changes the cluster.
 
 | Field | Required | Description |
 |---|---|---|
-| `controlPlaneUrl` | Yes | Absolute HTTPS URL. |
+| `controlPlaneUrl` | Yes | Absolute HTTP URL. HTTPS is not supported yet. |
 | `authorizationToken` | Yes | Control Plane token. |
 | `containerRegistrySystemHostname` | Yes | DNS name, IPv4 or bracketed IPv6, with an optional port. No scheme or path. |
 | `containerRegistrySystem` | One of two | Credentials. The command creates `cn-system-image-pull-secret`. |

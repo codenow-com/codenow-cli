@@ -6,7 +6,7 @@
   "required": ["controlPlaneUrl", "authorizationToken", "containerRegistrySystemHostname"],
   "properties": {
     "$schema": { "type": "string", "format": "uri-reference" },
-    "controlPlaneUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "controlPlaneUrl": { "type": "string", "format": "uri", "pattern": "^http://" },
     "authorizationToken": { "type": "string", "minLength": 1 },
     "imagePullSecret": { "type": "string", "minLength": 1 },
     "containerRegistrySystemHostname": { "type": "string", "minLength": 1 },

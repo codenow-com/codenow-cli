@@ -18,7 +18,7 @@ public class InstallServiceTests
 
     private const string Minimal = """
     {
-      "controlPlaneUrl": "https://cloud.codenow.com",
+      "controlPlaneUrl": "http://cloud.codenow.com",
       "authorizationToken": "tok",
       "containerRegistrySystemHostname": "registry.example",
       "containerRegistrySystem": { "username": "u", "password": "p" }
@@ -49,17 +49,16 @@ public class InstallServiceTests
     }
 
     [Theory]
-    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s"}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"","containerRegistrySystemHostname":"r","imagePullSecret":"s"}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r"}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","containerRegistrySystem":{"username":"u","password":"p"}}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","containerRegistrySystem":{"username":"u"}}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"https://r","imagePullSecret":"s"}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","unknown":1}""")]
-    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","allowInsecureControlPlane":true}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","namespaceName":"Bad_Name"}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","httpProxy":{"hostname":"http://p","port":1}}""")]
-    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","httpProxy":{"hostname":"p","port":70000}}""")]
+    [InlineData("""{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s"}""")]
+    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"","containerRegistrySystemHostname":"r","imagePullSecret":"s"}""")]
+    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r"}""")]
+    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","containerRegistrySystem":{"username":"u","password":"p"}}""")]
+    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r","containerRegistrySystem":{"username":"u"}}""")]
+    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"https://r","imagePullSecret":"s"}""")]
+    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","unknown":1}""")]
+    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","namespaceName":"Bad_Name"}""")]
+    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","httpProxy":{"hostname":"http://p","port":1}}""")]
+    [InlineData("""{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"s","httpProxy":{"hostname":"p","port":70000}}""")]
     public void InvalidInputIsRejected(string json)
     {
         Assert.Throws<InstallConfigException>(() => Config(json));
@@ -134,21 +133,6 @@ public class InstallServiceTests
     }
 
     [Fact]
-    public async Task RerunRemovesInsecureControlPlaneOptIn()
-    {
-        client.Install.ConfigMaps["cn-dp-update-controller-config"] = new V1ConfigMap
-        {
-            Data = new Dictionary<string, string> { ["config.json"] = """{"controlPlaneUrl":"http://mock","allowInsecureControlPlane":true}""" },
-        };
-
-        await Service().InstallAsync(Config(), recoverController: false);
-
-        var json = client.AppliedObjects.OfType<V1ConfigMap>().Single().Data["config.json"];
-        Assert.DoesNotContain("allowInsecureControlPlane", json);
-        Assert.Contains("\"controlPlaneUrl\":\"https://", json);
-    }
-
-    [Fact]
     public async Task RecoveryRestoresLatest()
     {
         client.Install.CronJob = new InstallManifestBuilder(Config(), Instance).CronJob("registry.example/x@sha256:abc");
@@ -193,7 +177,7 @@ public class InstallServiceTests
     [Fact]
     public async Task ExistingPullSecretIsReusedUnchanged()
     {
-        const string json = """{"controlPlaneUrl":"https://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"mine"}""";
+        const string json = """{"controlPlaneUrl":"http://x","authorizationToken":"t","containerRegistrySystemHostname":"r","imagePullSecret":"mine"}""";
         client.Install.Secrets.Add("mine");
 
         await Service().InstallAsync(Config(json), recoverController: false);
