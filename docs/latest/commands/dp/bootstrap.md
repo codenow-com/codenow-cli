@@ -111,10 +111,15 @@ configuration.
 | Field | Description |
 | --- | --- |
 | Configuration repository URL | Git URL containing the Data Plane configuration repository. The repository must include a folder that matches the specified environment name. |
-| Authentication method | Select whether to use username/password or an access token for Git access. |
+| Authentication method | Username/password, access token, or GitHub App. |
 | Username | Git username (required for username/password auth). |
 | Password | Git password (required for username/password auth). |
 | Access token | Git access token (required for token-based auth). |
+| GitHub App ID | Numeric ID of the GitHub App. |
+| GitHub App installation ID | Numeric ID of the app installation with access to the configuration repository. |
+| GitHub App private key path | PEM-encoded PKCS#1 RSA private key file. Its contents are encrypted in the saved configuration. |
+| GitHub API URL | Defaults to `https://api.github.com`. A custom Enterprise API URL, e.g. `https://github.example.com/api/v3`, is supported only with FluxCD enabled. |
+
 
 > When FluxCD is enabled, authentication values must be provided according to the
 > FluxCD Source Controller documentation for GitRepository secrets (see the

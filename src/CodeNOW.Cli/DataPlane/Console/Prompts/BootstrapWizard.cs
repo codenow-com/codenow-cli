@@ -215,7 +215,8 @@ internal sealed class BootstrapWizard
         var scmAuthChoices = PromptFactory.BuildSelectionChoices(
             existingConfig is not null ? opConfig.Scm.AuthenticationMethod : null,
             ScmAuthenticationMethod.UsernamePassword,
-            ScmAuthenticationMethod.AccessToken);
+            ScmAuthenticationMethod.AccessToken,
+            ScmAuthenticationMethod.GitHubApp);
         opConfig.Scm.AuthenticationMethod = AnsiConsole.Prompt(
             new SelectionPrompt<ScmAuthenticationMethod>()
                 .Title("Authentication method?")
@@ -223,6 +224,7 @@ internal sealed class BootstrapWizard
                 {
                     ScmAuthenticationMethod.UsernamePassword => "Username / password",
                     ScmAuthenticationMethod.AccessToken => "Access token",
+                    ScmAuthenticationMethod.GitHubApp => "GitHub App",
                     _ => m.ToString()
                 })
                 .AddChoices(scmAuthChoices)
@@ -230,6 +232,46 @@ internal sealed class BootstrapWizard
 
         switch (opConfig.Scm.AuthenticationMethod)
         {
+            case ScmAuthenticationMethod.GitHubApp:
+                opConfig.Scm.GithubAppId = PromptText(
+                    promptFactory, "GitHub App ID                               :",
+                    initialValue: existingConfig is not null ? opConfig.Scm.GithubAppId : null,
+                    validator: value => ScmConfigValidator.IsValidId(value)
+                        ? ValidationResult.Success() : ValidationResult.Error("[red]Enter a positive integer[/]"));
+                opConfig.Scm.GithubAppInstallationId = PromptText(
+                    promptFactory, "GitHub App installation ID                  :",
+                    initialValue: existingConfig is not null ? opConfig.Scm.GithubAppInstallationId : null,
+                    validator: value => ScmConfigValidator.IsValidId(value)
+                        ? ValidationResult.Success() : ValidationResult.Error("[red]Enter a positive integer[/]"));
+                var keepKey = existingConfig is not null && !string.IsNullOrWhiteSpace(opConfig.Scm.GithubAppPrivateKey);
+                var keyPath = PromptText(
+                    promptFactory, "GitHub App private key path (.pem)          :",
+                    allowEmpty: keepKey,
+                    validator: path =>
+                    {
+                        if (string.IsNullOrWhiteSpace(path) && keepKey)
+                            return ValidationResult.Success();
+                        try
+                        {
+                            return File.Exists(path) && ScmConfigValidator.IsValidPrivateKey(File.ReadAllText(path))
+                                ? ValidationResult.Success()
+                                : ValidationResult.Error("[red]Select a PEM-encoded PKCS#1 RSA private key file[/]");
+                        }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                        {
+                            return ValidationResult.Error("[red]Unable to read the private key file[/]");
+                        }
+                    });
+                if (!string.IsNullOrWhiteSpace(keyPath))
+                    opConfig.Scm.GithubAppPrivateKey = File.ReadAllText(keyPath);
+                var apiUrl = PromptText(
+                    new PromptFactory(usePrefill: true), "GitHub API URL                              :",
+                    initialValue: string.IsNullOrWhiteSpace(opConfig.Scm.GithubApiUrl)
+                        ? "https://api.github.com" : opConfig.Scm.GithubApiUrl,
+                    validator: value => ScmConfigValidator.IsValidApiUrl(value)
+                        ? ValidationResult.Success() : ValidationResult.Error("[red]Enter an absolute HTTPS API URL[/]"));
+                opConfig.Scm.GithubApiUrl = string.IsNullOrWhiteSpace(apiUrl) ? null : apiUrl;
+                break;
             case ScmAuthenticationMethod.UsernamePassword:
                 opConfig.Scm.Username = PromptText(
                     promptFactory,

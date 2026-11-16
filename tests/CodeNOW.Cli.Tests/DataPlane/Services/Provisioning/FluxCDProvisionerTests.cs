@@ -44,8 +44,11 @@ public class FluxCDProvisionerTests
         Assert.Contains("gitrepositories.source.toolkit.fluxcd.io", patched);
     }
 
-    [Fact]
-    public async Task ApplySourceControllerAsync_ConfiguresDeploymentAndCredentials()
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(true, "https://github.example.com/api/v3")]
+    public async Task ApplySourceControllerAsync_ConfiguresDeploymentAndCredentials(bool githubApp, string? apiUrl)
     {
         WriteFluxcdManifests(
             """
@@ -94,6 +97,14 @@ public class FluxCDProvisionerTests
 
         var provisioner = BuildProvisioner();
         var config = BuildConfig();
+        if (githubApp)
+        {
+            config.Scm.AuthenticationMethod = ScmAuthenticationMethod.GitHubApp;
+            config.Scm.GithubAppId = "123";
+            config.Scm.GithubAppInstallationId = "456";
+            config.Scm.GithubAppPrivateKey = "pem-content";
+            config.Scm.GithubApiUrl = apiUrl;
+        }
         config.HttpProxy.Enabled = true;
         config.HttpProxy.Hostname = "proxy.example.com";
         config.HttpProxy.Port = 3128;
@@ -157,7 +168,19 @@ public class FluxCDProvisionerTests
         Assert.Equal(new[] { "true" }, requirement.Values);
 
         Assert.NotNull(appliedSecret);
-        Assert.True(appliedSecret!.Data.ContainsKey("bearerToken"));
+        if (githubApp)
+        {
+            Assert.Equal("123", Encoding.UTF8.GetString(appliedSecret!.Data["githubAppID"]));
+            Assert.Equal("456", Encoding.UTF8.GetString(appliedSecret.Data["githubAppInstallationID"]));
+            Assert.Equal("pem-content", Encoding.UTF8.GetString(appliedSecret.Data["githubAppPrivateKey"]));
+            Assert.False(appliedSecret.Data.ContainsKey("bearerToken"));
+            if (apiUrl is null)
+                Assert.False(appliedSecret.Data.ContainsKey("githubAppBaseURL"));
+            else
+                Assert.Equal(apiUrl, Encoding.UTF8.GetString(appliedSecret.Data["githubAppBaseURL"]));
+        }
+        else
+            Assert.True(appliedSecret!.Data.ContainsKey("bearerToken"));
         Assert.True(appliedSecret.Data.ContainsKey("ca.crt"));
     }
 

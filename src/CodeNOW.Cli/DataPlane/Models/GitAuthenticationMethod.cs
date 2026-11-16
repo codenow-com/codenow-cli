@@ -15,5 +15,6 @@ public enum ScmAuthenticationMethod
     /// <summary>
     /// Personal access token authentication.
     /// </summary>
-    AccessToken
+    AccessToken,
+    GitHubApp
 }

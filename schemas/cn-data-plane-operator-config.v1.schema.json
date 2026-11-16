@@ -350,8 +350,26 @@
           "type": "string",
           "enum": [
             "UsernamePassword",
-            "AccessToken"
+            "AccessToken",
+            "GitHubApp"
           ]
+        },
+        "GithubAppId": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+$"
+        },
+        "GithubAppInstallationId": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+$"
+        },
+        "GithubAppPrivateKey": {
+          "type": ["string", "null"],
+          "description": "PEM-encoded PKCS#1 RSA private key; encrypted in saved configurations."
+        },
+        "GithubApiUrl": {
+          "type": ["string", "null"],
+          "format": "uri",
+          "description": "GitHub Enterprise API URL. Requires FluxCD."
         },
         "Username": {
           "type": [
@@ -400,6 +418,19 @@
             "required": [
               "AccessToken"
             ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "AuthenticationMethod": { "const": "GitHubApp" } }
+          },
+          "then": {
+            "required": ["GithubAppId", "GithubAppInstallationId", "GithubAppPrivateKey"],
+            "properties": {
+              "GithubAppId": { "type": "string", "minLength": 1 },
+              "GithubAppInstallationId": { "type": "string", "minLength": 1 },
+              "GithubAppPrivateKey": { "type": "string", "minLength": 1 }
+            }
           }
         }
       ]

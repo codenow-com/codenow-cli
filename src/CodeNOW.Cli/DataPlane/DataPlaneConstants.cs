@@ -44,6 +44,10 @@ public static class DataPlaneConstants
     /// SCM token for system integrations.
     /// </summary>
     public const string DataPlaneConfigKeyScmSystemAuthToken = "cn_scm_system_auth_token";
+    public const string DataPlaneConfigKeyScmGithubAppId = "cn_scm_system_github_app_id";
+    public const string DataPlaneConfigKeyScmGithubAppInstallationId = "cn_scm_system_github_app_installation_id";
+    public const string DataPlaneConfigKeyScmGithubAppPrivateKey = "cn_scm_system_github_app_private_key";
+    public const string DataPlaneConfigKeyScmGithubApiUrl = "cn_scm_system_github_api_url";
     /// <summary>
     /// SCM password for system integrations.
     /// </summary>
