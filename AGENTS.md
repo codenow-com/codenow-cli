@@ -4,7 +4,7 @@ Architecture and maintenance guide for the CodeNOW CLI (`cn`).
 
 ## Project Overview
 
-A .NET 10 NativeAOT CLI for bootstrapping and managing CodeNOW Data Plane infrastructure on Kubernetes. Ships as a single binary (`cn`).
+A .NET 11 NativeAOT CLI for bootstrapping and managing CodeNOW Data Plane infrastructure on Kubernetes. Ships as a single binary (`cn`).
 
 **Commands**: `cn dp bootstrap`, `cn dp dashboard`, `cn dp config encrypt`
 

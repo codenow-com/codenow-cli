@@ -1,7 +1,7 @@
 PROJECT = src/CodeNOW.Cli/CodeNOW.Cli.csproj
-PULUMI_OPERATOR_VERSION = v2.9.3
-FLUXCD_VERSION = v2.7.5
-FLUXCD_SOURCE_CONTROLLER_VERSION = v1.7.4
+PULUMI_OPERATOR_VERSION = v2.10.1
+FLUXCD_VERSION = v2.10.0
+FLUXCD_SOURCE_CONTROLLER_VERSION = v1.10.1
 PULUMI_OPERATOR_MANIFESTS_TARGET_DIR := ./assets/vendor/generated/dataplane/pulumi-operator
 FLUXCD_MANIFESTS_TARGET_DIR := ./assets/vendor/generated/dataplane/fluxcd
 PULUMI_OPERATOR_SOURCE_URL = https://api.github.com/repos/pulumi/pulumi-kubernetes-operator/contents/operator/config

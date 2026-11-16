@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
-ARG SOURCE_IMAGE=pulumi/pulumi
-ARG SOURCE_IMAGE_VERSION=3.244.0
+# Plugin installation only needs the Pulumi CLI, without language runtimes.
+ARG SOURCE_IMAGE=pulumi/pulumi-base
+ARG SOURCE_IMAGE_VERSION=3.276.0
 
 FROM ${SOURCE_IMAGE}:${SOURCE_IMAGE_VERSION} AS build
 

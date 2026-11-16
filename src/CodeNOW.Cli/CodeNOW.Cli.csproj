@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
 
     <AssemblyName>cn</AssemblyName>
     <RootNamespace>CodeNOW.Cli</RootNamespace>
@@ -32,17 +32,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ConsoleAppFramework" Version="5.7.13">
+    <PackageReference Include="ConsoleAppFramework" Version="5.8.1">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="KubernetesClient.Aot" Version="18.0.13" />
+    <PackageReference Include="KubernetesClient.Aot" Version="21.0.8" />
     <PackageReference Include="Lunet.Extensions.Logging.SpectreConsole" Version="1.2.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="11.0.0" />
+    <!-- Lunet 1.2.0 requires the AnsiSupport API removed in newer Spectre.Console releases. -->
     <PackageReference Include="Spectre.Console" Version="0.54.0" />
     <PackageReference Include="TextCopy" Version="6.2.1" />
-    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
   <ItemGroup>
