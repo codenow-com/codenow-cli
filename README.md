@@ -4,7 +4,7 @@
 CodeNOW CLI is a cross-platform command-line tool for installing, upgrading, and
 operating CodeNOW infrastructure components on Kubernetes clusters. It focuses on predictable, repeatable environments and a smooth operator experience.
 
-Built on .NET 10 with full NativeAOT compatibility, the CLI ships as a single
+Built on .NET 11 with full NativeAOT compatibility, the CLI ships as a single
 statically linked executable and starts fast even in minimal container or
 air-gapped environments.
 
@@ -53,6 +53,8 @@ with versioned snapshots for each release.
 
 ## Development
 
+Requires the .NET 11 SDK.
+
 - `make restore` restores NuGet dependencies for the main project and tests.
 - `make build` builds the CLI project.
 - `make test` runs the test suite.
@@ -60,6 +62,11 @@ with versioned snapshots for each release.
 - `make clean` cleans build outputs for the main project and tests.
 - `make run -- <args>` runs the CLI with arguments passed after `--`.
 - `make update-pulumi-operator` downloads and refreshes Pulumi operator manifests and metadata under `assets/`.
+- `make update-fluxcd` downloads and refreshes FluxCD manifests and metadata under `assets/`.
+
+After changing the Pulumi Dockerfiles, publish new runtime/plugin images using
+the corresponding GitHub Actions workflows. These workflows update the image
+versions in `pulumi-operator-info.json` after publishing.
 
 ## Roadmap
 
