@@ -476,6 +476,15 @@ internal sealed class PulumiStackProvisioner : IPulumiStackProvisioner
         var secretName = DataPlaneConstants.OperatorConfigSecretName;
         return config.Scm.AuthenticationMethod switch
         {
+            ScmAuthenticationMethod.GitHubApp => new JsonObject
+            {
+                ["githubApp"] = new JsonObject
+                {
+                    ["appID"] = BuildSecretKeySelector(secretName, DataPlaneConstants.DataPlaneConfigKeyScmGithubAppId),
+                    ["installationID"] = BuildSecretKeySelector(secretName, DataPlaneConstants.DataPlaneConfigKeyScmGithubAppInstallationId),
+                    ["privateKey"] = BuildSecretKeySelector(secretName, DataPlaneConstants.DataPlaneConfigKeyScmGithubAppPrivateKey)
+                }
+            },
             ScmAuthenticationMethod.AccessToken => new JsonObject
             {
                 ["token"] = BuildSecretKeySelector(

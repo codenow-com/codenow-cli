@@ -409,6 +409,13 @@ internal sealed class FluxCDProvisioner : IFluxCDProvisioner
 
         switch (scm.AuthenticationMethod)
         {
+            case ScmAuthenticationMethod.GitHubApp:
+                secret.Data["githubAppID"] = Encoding.UTF8.GetBytes(scm.GithubAppId!);
+                secret.Data["githubAppInstallationID"] = Encoding.UTF8.GetBytes(scm.GithubAppInstallationId!);
+                secret.Data["githubAppPrivateKey"] = Encoding.UTF8.GetBytes(scm.GithubAppPrivateKey!);
+                if (!string.IsNullOrWhiteSpace(scm.GithubApiUrl))
+                    secret.Data["githubAppBaseURL"] = Encoding.UTF8.GetBytes(scm.GithubApiUrl);
+                break;
             case ScmAuthenticationMethod.AccessToken:
                 secret.Data["bearerToken"] = Encoding.UTF8.GetBytes(scm.AccessToken ?? string.Empty);
                 break;
@@ -483,6 +490,8 @@ internal sealed class FluxCDProvisioner : IFluxCDProvisioner
 
         KubernetesManifestTools.ApplyLabels(gitRepository, "metadata", FluxcdGitRepositoryLabels);
         gitRepository.Set("spec.secretRef.name", FluxcdGitRepositorySecretName);
+        gitRepository.Set("spec.provider",
+            config.Scm.AuthenticationMethod == ScmAuthenticationMethod.GitHubApp ? "github" : "generic");
         gitRepository.Set("spec.sparseCheckout[0]", config.Environment.Name);
         var patch = new V1Patch(gitRepository.ToJsonString(), V1Patch.PatchType.ApplyPatch);
         await client.CustomObjects.PatchNamespacedCustomObjectAsync(

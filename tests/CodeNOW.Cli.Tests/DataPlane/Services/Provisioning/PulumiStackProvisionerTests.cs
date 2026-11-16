@@ -483,8 +483,10 @@ public class PulumiStackProvisionerTests
         Assert.True(changed);
     }
 
-    [Fact]
-    public async Task HasWorkspaceInputsChangedAsync_ReturnsTrueWhenWorkspaceInputHashIsStale()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HasWorkspaceInputsChangedAsync_ReturnsTrueWhenWorkspaceInputHashIsStale(bool githubApp)
     {
         var client = new FakeKubernetesClient();
         var previousConfig = new OperatorConfig
@@ -509,6 +511,18 @@ public class PulumiStackProvisionerTests
                 AccessToken = "new-token"
             }
         };
+        if (githubApp)
+        {
+            foreach (var config in new[] { previousConfig, currentConfig })
+            {
+                config.Scm.AuthenticationMethod = ScmAuthenticationMethod.GitHubApp;
+                config.Scm.GithubAppId = "123";
+                config.Scm.GithubAppInstallationId = "456";
+                config.Scm.AccessToken = null;
+            }
+            previousConfig.Scm.GithubAppPrivateKey = "old-key";
+            currentConfig.Scm.GithubAppPrivateKey = "new-key";
+        }
         var workspace = BuildWorkspace(previousConfig, "sa");
         client.CustomObjects.ListNamespacedCustomObjectAsyncHandler = (_, _, _, _, _) =>
             Task.FromResult<object>(BuildWorkspaceList(workspace));

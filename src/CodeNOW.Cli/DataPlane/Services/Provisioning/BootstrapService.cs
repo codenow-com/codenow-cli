@@ -68,6 +68,7 @@ public class BootstrapService : IBootstrapService
     /// </remarks>
     public async Task BootstrapAsync(OperatorConfig config)
     {
+        ScmConfigValidator.Validate(config);
         logger.LogInformation("Starting bootstrap...");
 
         var client = kubernetesClientFactory.Create(logger, connectionOptions);

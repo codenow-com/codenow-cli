@@ -418,6 +418,23 @@ internal sealed class PulumiStackManifestBuilder
 
         if (config.FluxCD?.Enabled != true)
         {
+            if (scm.AuthenticationMethod == ScmAuthenticationMethod.GitHubApp)
+            {
+                JsonObject SecretRef(string key) => new()
+                {
+                    ["type"] = "Secret",
+                    ["secret"] = new JsonObject { ["name"] = secretName, ["key"] = key }
+                };
+                spec["gitAuth"] = new JsonObject
+                {
+                    ["githubApp"] = new JsonObject
+                    {
+                        ["appID"] = SecretRef(DataPlaneConstants.DataPlaneConfigKeyScmGithubAppId),
+                        ["installationID"] = SecretRef(DataPlaneConstants.DataPlaneConfigKeyScmGithubAppInstallationId),
+                        ["privateKey"] = SecretRef(DataPlaneConstants.DataPlaneConfigKeyScmGithubAppPrivateKey)
+                    }
+                };
+            }
             if (scm.AuthenticationMethod == ScmAuthenticationMethod.AccessToken)
             {
                 spec["gitAuth"] = new JsonObject
@@ -465,6 +482,14 @@ internal sealed class PulumiStackManifestBuilder
 
         AddSecretEnvRef(DataPlaneConstants.DataPlaneConfigKeyScmSystemUrl);
         AddSecretEnvRef(DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthMethod);
+        if (scm.AuthenticationMethod == ScmAuthenticationMethod.GitHubApp)
+        {
+            AddSecretEnvRef(DataPlaneConstants.DataPlaneConfigKeyScmGithubAppId);
+            AddSecretEnvRef(DataPlaneConstants.DataPlaneConfigKeyScmGithubAppInstallationId);
+            AddSecretEnvRef(DataPlaneConstants.DataPlaneConfigKeyScmGithubAppPrivateKey);
+            if (!string.IsNullOrWhiteSpace(scm.GithubApiUrl))
+                AddSecretEnvRef(DataPlaneConstants.DataPlaneConfigKeyScmGithubApiUrl);
+        }
         if (!string.IsNullOrWhiteSpace(config.Scm.AccessToken))
             AddSecretEnvRef(DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthToken);
         if (!string.IsNullOrWhiteSpace(config.Scm.Password))

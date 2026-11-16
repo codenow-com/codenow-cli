@@ -17,6 +17,7 @@ public class OperatorConfigServiceTests
         {
             var filePath = Path.Combine(tempDir.FullName, "operator.json");
             var inputConfig = BuildConfig();
+            inputConfig.Scm.GithubAppPrivateKey = "private-pem-contents";
             var plaintextJson = JsonSerializer.Serialize(
                 inputConfig,
                 OperatorConfigJsonContext.Default.OperatorConfig);
@@ -43,6 +44,8 @@ public class OperatorConfigServiceTests
             Assert.StartsWith(SecretProtector.Prefix, npmUsername, StringComparison.Ordinal);
             Assert.StartsWith(SecretProtector.Prefix, npmPassword, StringComparison.Ordinal);
             Assert.StartsWith(SecretProtector.Prefix, passphrase, StringComparison.Ordinal);
+            Assert.StartsWith(SecretProtector.Prefix,
+                root.GetProperty("Scm").GetProperty("GithubAppPrivateKey").GetString(), StringComparison.Ordinal);
 
             var typeInfo = OperatorConfigJsonTypeInfoFactory.Create(() => encryptionKey);
             var decrypted = JsonSerializer.Deserialize(encryptedJson, typeInfo);
@@ -55,6 +58,7 @@ public class OperatorConfigServiceTests
             Assert.Equal(inputConfig.NpmRegistry.Username, decrypted.NpmRegistry.Username);
             Assert.Equal(inputConfig.NpmRegistry.Password, decrypted.NpmRegistry.Password);
             Assert.Equal(inputConfig.Pulumi.Passphrase, decrypted.Pulumi.Passphrase);
+            Assert.Equal(inputConfig.Scm.GithubAppPrivateKey, decrypted.Scm.GithubAppPrivateKey);
         }
         finally
         {

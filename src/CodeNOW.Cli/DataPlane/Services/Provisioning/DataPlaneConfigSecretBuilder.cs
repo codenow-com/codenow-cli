@@ -57,6 +57,14 @@ public sealed class DataPlaneConfigSecretBuilder
         var podPlacementMode = PodPlacementModeExtensions.ToConfigString(config.Kubernetes.PodPlacementMode);
 
         var data = new Dictionary<string, byte[]>();
+        if (config.Scm.AuthenticationMethod == ScmAuthenticationMethod.GitHubApp)
+        {
+            data[DataPlaneConstants.DataPlaneConfigKeyScmGithubAppId] = Encoding.UTF8.GetBytes(config.Scm.GithubAppId!);
+            data[DataPlaneConstants.DataPlaneConfigKeyScmGithubAppInstallationId] = Encoding.UTF8.GetBytes(config.Scm.GithubAppInstallationId!);
+            data[DataPlaneConstants.DataPlaneConfigKeyScmGithubAppPrivateKey] = Encoding.UTF8.GetBytes(config.Scm.GithubAppPrivateKey!);
+            if (!string.IsNullOrWhiteSpace(config.Scm.GithubApiUrl))
+                data[DataPlaneConstants.DataPlaneConfigKeyScmGithubApiUrl] = Encoding.UTF8.GetBytes(config.Scm.GithubApiUrl);
+        }
 
         data[DataPlaneConstants.DataPlaneConfigKeyScmSystemUrl] = Encoding.UTF8.GetBytes(config.Scm.Url);
         data[DataPlaneConstants.DataPlaneConfigKeyScmSystemAuthMethod] =

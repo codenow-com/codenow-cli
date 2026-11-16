@@ -15,6 +15,7 @@ public static class SecretPropertyPolicy
             "Username",
             "Password",
             "AccessToken",
+            "GithubAppPrivateKey",
             "AccessKey",
             "SecretKey",
             "Passphrase"

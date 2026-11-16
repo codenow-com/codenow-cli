@@ -11,6 +11,59 @@ namespace CodeNOW.Cli.Tests.DataPlane.Services.Provisioning;
 
 public class PulumiStackManifestBuilderTests
 {
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(false, "https://api.github.com")]
+    [InlineData(true, "https://github.example.com/api/v3")]
+    public void BuildStack_GithubAppPassesSecretsAndConfiguresGitAuth(bool flux, string? apiUrl)
+    {
+        var config = new OperatorConfig
+        {
+            Scm =
+            {
+                Url = "https://github.com/org/repo",
+                AuthenticationMethod = ScmAuthenticationMethod.GitHubApp,
+                GithubAppId = "123",
+                GithubAppInstallationId = "456",
+                GithubAppPrivateKey = "pem-content",
+                GithubApiUrl = apiUrl
+            },
+            FluxCD = new FluxCDConfig { Enabled = flux }
+        };
+        var spec = BuildBuilder().BuildStack(config, "sa")["spec"]!;
+        var secret = new DataPlaneConfigSecretBuilder().Build(config);
+        var refs = spec["secretsRef"]!;
+        foreach (var (key, value) in new[]
+                 {
+                     ("cn:scm.system.github.app.id", "123"),
+                     ("cn:scm.system.github.app.installation.id", "456"),
+                     ("cn:scm.system.github.app.private.key", "pem-content"),
+                     ("cn:scm.system.github.api.url", apiUrl)
+                 })
+        {
+            if (value is null)
+            {
+                Assert.Null(refs[key]);
+                continue;
+            }
+            Assert.Equal("Secret", refs[key]!["type"]!.GetValue<string>());
+            Assert.Equal(DataPlaneConstants.OperatorConfigSecretName,
+                refs[key]!["secret"]!["name"]!.GetValue<string>());
+            var secretKey = refs[key]!["secret"]!["key"]!.GetValue<string>();
+            Assert.Equal(value, System.Text.Encoding.UTF8.GetString(secret.Data[secretKey]));
+        }
+        if (flux)
+            Assert.Null(spec["gitAuth"]);
+        else
+        {
+            var auth = spec["gitAuth"]!["githubApp"]!;
+            Assert.Equal(DataPlaneConstants.DataPlaneConfigKeyScmGithubAppId, auth["appID"]!["secret"]!["key"]!.GetValue<string>());
+            Assert.Equal(DataPlaneConstants.DataPlaneConfigKeyScmGithubAppInstallationId, auth["installationID"]!["secret"]!["key"]!.GetValue<string>());
+            Assert.Equal(DataPlaneConstants.DataPlaneConfigKeyScmGithubAppPrivateKey, auth["privateKey"]!["secret"]!["key"]!.GetValue<string>());
+            Assert.Equal("Secret", auth["privateKey"]!["type"]!.GetValue<string>());
+        }
+    }
+
     [Fact]
     public void BuildStack_AddsAwsEnvRefsWhenAccessKeyAuth()
     {

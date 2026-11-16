@@ -129,6 +129,18 @@ public sealed class NpmRegistryConfig
 /// </summary>
 public sealed class ScmConfig
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GithubAppId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GithubAppInstallationId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GithubAppPrivateKey { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GithubApiUrl { get; set; }
+
     public string Url { get; set; } = "";
     public ScmAuthenticationMethod AuthenticationMethod { get; set; } = ScmAuthenticationMethod.UsernamePassword;
 
