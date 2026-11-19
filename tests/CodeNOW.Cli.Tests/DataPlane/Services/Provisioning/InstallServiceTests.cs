@@ -503,6 +503,7 @@ public class InstallServiceTests
         var container = pod.Containers.Single();
 
         Assert.True(pod.SecurityContext.RunAsNonRoot);
+        Assert.Equal((1000L, 1000L, 1000L), (pod.SecurityContext.RunAsUser, pod.SecurityContext.RunAsGroup, pod.SecurityContext.FsGroup));
         Assert.Equal("RuntimeDefault", pod.SecurityContext.SeccompProfile.Type);
         Assert.False(container.SecurityContext.AllowPrivilegeEscalation);
         Assert.Equal("ALL", container.SecurityContext.Capabilities.Drop.Single());

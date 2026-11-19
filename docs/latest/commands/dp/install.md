@@ -99,7 +99,7 @@ the Controller.
 | `terminationGracePeriodSeconds` | `30` |
 | Image | `<registry>/codenow/data-plane-update-controller:latest`, `imagePullPolicy: Always` |
 | CPU / memory | request `100m` / `128Mi`, limit `500m` / `256Mi` |
-| Security | UID/GID `65532`, `runAsNonRoot`, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp (Restricted Pod Security) |
+| Security | UID/GID `1000`, `fsGroup: 1000`, `runAsNonRoot`, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp (Restricted Pod Security) |
 
 ## Permissions
 

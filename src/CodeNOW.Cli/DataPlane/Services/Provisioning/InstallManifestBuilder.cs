@@ -27,7 +27,8 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
 
     private const string RbacGroup = "rbac.authorization.k8s.io";
     private const string ProfileResource = "DataPlane/Manifests/UpdateController/deployer-profile.json";
-    private const long NonRootId = 65532;
+    /// <summary>UID, GID and fsGroup of both Job types (data-plane-installation spec, Restricted admission).</summary>
+    private const long NonRootId = 1000;
 
     private string Namespace => config.NamespaceName!;
 
@@ -265,6 +266,7 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
             RunAsNonRoot = true,
             RunAsUser = NonRootId,
             RunAsGroup = NonRootId,
+            FsGroup = NonRootId,
             SeccompProfile = new V1SeccompProfile { Type = "RuntimeDefault" },
         },
         Containers =
