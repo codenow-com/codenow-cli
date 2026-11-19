@@ -66,6 +66,9 @@ public sealed class KubernetesClientAdapter : IKubernetesClient
         public Task<V1ClusterRoleBinding?> ReadClusterRoleBindingAsync(string name)
             => OrNull(() => client.RbacAuthorizationV1.ReadClusterRoleBindingAsync(name));
 
+        public async Task<IList<V1ClusterRoleBinding>> ListClusterRoleBindingsAsync(string labelSelector)
+            => (await client.RbacAuthorizationV1.ListClusterRoleBindingAsync(labelSelector: labelSelector)).Items ?? [];
+
         private static async Task<T?> OrNull<T>(Func<Task<T>> read) where T : class
         {
             try

@@ -119,6 +119,7 @@ public interface IKubernetesInstallClient
     Task<bool> SecretExistsAsync(string name, string namespaceParameter);
     Task<V1CronJob?> ReadCronJobAsync(string name, string namespaceParameter);
     Task<V1ClusterRoleBinding?> ReadClusterRoleBindingAsync(string name);
+    Task<IList<V1ClusterRoleBinding>> ListClusterRoleBindingsAsync(string labelSelector);
 }
 
 public interface IKubernetesVersionClient

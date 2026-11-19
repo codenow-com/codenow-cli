@@ -5,6 +5,7 @@ using CodeNOW.Cli.DataPlane.Console.Commands;
 using CodeNOW.Cli.DataPlane.Models;
 using CodeNOW.Cli.DataPlane.Services.Provisioning;
 using CodeNOW.Cli.Tests.TestDoubles.Kubernetes;
+using k8s;
 using k8s.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -91,6 +92,55 @@ public class InstallServiceTests
         Assert.Null(pod.Containers.Single().Env);
         Assert.Equal("cn-cli", cronJob.Spec.JobTemplate.Spec.Template.Metadata.Labels["app.kubernetes.io/managed-by"]);
         Assert.Equal("cn-system-image-pull-secret", pod.ImagePullSecrets.Single().Name);
+        Assert.Equal(900, cronJob.Spec.JobTemplate.Spec.ActiveDeadlineSeconds);
+        Assert.Equal(30, pod.TerminationGracePeriodSeconds);
+        Assert.Null(cronJob.Spec.Suspend);
+    }
+
+    [Fact]
+    public async Task ExactlyOneCronJobIsEnabledAfterEveryPrerequisite()
+    {
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        var kinds = client.AppliedObjects.Select(resource => resource.GetType().Name).ToList();
+        Assert.Single(client.AppliedObjects.OfType<V1CronJob>());
+        Assert.Equal(nameof(V1CronJob), kinds.Last());
+        foreach (var prerequisite in new[]
+        {
+            nameof(V1Secret), nameof(V1ConfigMap), nameof(V1ServiceAccount), nameof(V1Role),
+            nameof(V1RoleBinding), nameof(V1ClusterRole), nameof(V1ClusterRoleBinding),
+        })
+        {
+            Assert.Contains(prerequisite, kinds.Take(kinds.Count - 1));
+        }
+
+        Assert.Equal("cn-dp-identity", Assert.Single(client.Install.ConfigMaps).Key);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RerunAndRecoveryKeepTheRunDeadlineAndGrace(bool recoverController)
+    {
+        client.Install.ConfigMaps["cn-dp-identity"] = new V1ConfigMap { Data = new Dictionary<string, string> { ["clusterInstanceId"] = Instance } };
+        client.Install.CronJob = new V1CronJob
+        {
+            Spec = new V1CronJobSpec
+            {
+                JobTemplate = new V1JobTemplateSpec
+                {
+                    Spec = new V1JobSpec { Template = new V1PodTemplateSpec { Spec = new V1PodSpec { Containers = [new V1Container { Image = "registry.example/x@sha256:abc" }] } } },
+                },
+            },
+        };
+
+        await Service().InstallAsync(Config(), recoverController);
+
+        var cronJob = Applied<V1CronJob>();
+        Assert.Equal(900, cronJob.Spec.JobTemplate.Spec.ActiveDeadlineSeconds);
+        Assert.Equal(30, cronJob.Spec.JobTemplate.Spec.Template.Spec.TerminationGracePeriodSeconds);
+        Assert.Equal("Always", cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers.Single().ImagePullPolicy);
+        Assert.DoesNotContain(client.AppliedObjects, resource => resource is V1Job);
     }
 
     [Fact]
@@ -104,14 +154,222 @@ public class InstallServiceTests
     }
 
     [Fact]
-    public async Task NamedRulesKeepCreateSeparate()
+    public async Task ClusterScopedNamesEndWithTheInstallationNamespace()
+    {
+        var json = Minimal.Replace("\"authorizationToken\": \"tok\",", "\"authorizationToken\": \"tok\", \"namespaceName\": \"custom-ns\",");
+
+        await Service().InstallAsync(Config(json), recoverController: false);
+
+        var role = Applied<V1ClusterRole>();
+        var binding = Applied<V1ClusterRoleBinding>();
+        Assert.Equal("cn-dp-update-controller-custom-ns", role.Metadata.Name);
+        Assert.Equal("cn-dp-update-controller-custom-ns", binding.Metadata.Name);
+        Assert.Equal(("ClusterRole", "cn-dp-update-controller-custom-ns"), (binding.RoleRef.Kind, binding.RoleRef.Name));
+        var subject = Assert.Single(binding.Subjects);
+        Assert.Equal(("ServiceAccount", "cn-dp-update-controller", "custom-ns"), (subject.Kind, subject.Name, subject.NamespaceProperty));
+        Assert.Equal(new[] { "cn-dp-update-controller-custom-ns" }, client.Install.ClusterRoleBindingReads);
+
+        var deployerRbac = role.Rules.Single(r => r.ResourceNames is not null && r.Resources.Contains("clusterroles"));
+        Assert.Equal(new[] { "clusterroles", "clusterrolebindings" }, deployerRbac.Resources);
+        Assert.Equal(new[] { "get", "patch" }, deployerRbac.Verbs);
+        Assert.Equal(new[] { "cn-dp-deployer-custom-ns" }, deployerRbac.ResourceNames);
+        Assert.Contains(role.Rules, r => r.Resources is ["clusterroles", "clusterrolebindings"] && r.Verbs is ["create"] && r.ResourceNames is null);
+
+        foreach (var resource in new IKubernetesObject<V1ObjectMeta>[] { Applied<V1ServiceAccount>(), Applied<V1Role>(), Applied<V1RoleBinding>(), Applied<V1CronJob>() })
+        {
+            Assert.Equal(("cn-dp-update-controller", "custom-ns"), (resource.Metadata.Name, resource.Metadata.NamespaceProperty));
+        }
+    }
+
+    /// <summary>The Controller access matrix of the data-plane-installation spec, rule by rule.</summary>
+    [Fact]
+    public async Task RoleIsExactlyTheControllerAccessMatrix()
     {
         await Service().InstallAsync(Config(), recoverController: false);
 
-        var rules = Applied<V1Role>().Rules;
-        Assert.DoesNotContain(rules, r => r.Verbs.Contains("create") && r.ResourceNames is not null);
-        Assert.DoesNotContain(rules, r => r.Resources.Contains("pods/log") || r.Verbs.Contains("watch"));
+        var expected = new[]
+        {
+            "batch|cronjobs|get,patch|cn-dp-update-controller",
+            "batch|jobs|get,list,watch,create,delete|",
+            "|pods|list,watch|",
+            "|configmaps|get,list,watch,create,patch,delete|",
+            "|persistentvolumeclaims|get|cn-dp-pulumi-state",
+            "|persistentvolumeclaims|create|",
+            "|secrets|get|cn-dp-authorization,cn-dp-pulumi-passphrase,cn-dp-deployer-secrets",
+            "|secrets|patch|cn-dp-deployer-secrets",
+            "|secrets|create|",
+            "|serviceaccounts|get,patch|cn-dp-deployer",
+            "|serviceaccounts|create|",
+            "rbac.authorization.k8s.io|roles,rolebindings|get,list,create,patch,delete|",
+        };
+        var role = Applied<V1Role>();
+        var actual = role.Rules.Select(r =>
+            $"{string.Join(",", r.ApiGroups)}|{string.Join(",", r.Resources)}|{string.Join(",", r.Verbs)}|{string.Join(",", r.ResourceNames ?? [])}");
+
+        Assert.Equal(expected, actual);
+        Assert.Equal("cn-data-plane-system", role.Metadata.NamespaceProperty);
+        Assert.DoesNotContain(role.Rules, r => r.Verbs.Contains("create") && r.ResourceNames is not null);
+        Assert.DoesNotContain(role.Rules, r => r.Resources.Contains("pods/log") || (r.Resources.Contains("pods") && r.Verbs.Contains("get")));
+        Assert.DoesNotContain(role.Rules, r => r.Resources.Contains("secrets") && r.Verbs.Contains("delete"));
+        Assert.DoesNotContain(role.Rules, r => r.Verbs.Contains("escalate") || r.Verbs.Contains("bind") || r.Verbs.Contains("*"));
+
+        var binding = Applied<V1RoleBinding>();
+        Assert.Equal(("Role", "cn-dp-update-controller"), (binding.RoleRef.Kind, binding.RoleRef.Name));
+        Assert.Equal(("ServiceAccount", "cn-dp-update-controller", "cn-data-plane-system"),
+            (binding.Subjects.Single().Kind, binding.Subjects.Single().Name, binding.Subjects.Single().NamespaceProperty));
     }
+
+    /// <summary>
+    /// Kubernetes lets the Controller create a role only with permissions it holds itself: the whole
+    /// Deployer profile cluster-wide and the exact-name execution-journal Role in its namespace.
+    /// </summary>
+    [Fact]
+    public async Task ControllerHoldsEveryPermissionItDelegatesToTheDeployer()
+    {
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        var clusterRules = Applied<V1ClusterRole>().Rules;
+        var namespacedRules = Applied<V1Role>().Rules.Concat(clusterRules).ToList();
+        var profile = InstallManifestBuilder.DeployerProfile();
+        Assert.NotEmpty(profile);
+        foreach (var rule in profile)
+            Assert.True(Covers(clusterRules, rule), Describe(rule));
+
+        var journalRule = new V1PolicyRule
+        {
+            ApiGroups = [""],
+            Resources = ["configmaps"],
+            Verbs = ["get", "patch"],
+            ResourceNames = ["cn-dp-execution-5e613c15-c12b-4f65-94ef-83be1709d76c"],
+        };
+        Assert.True(Covers(Applied<V1Role>().Rules, journalRule), "execution journal without the profile");
+        Assert.True(Covers(namespacedRules, journalRule));
+    }
+
+    [Fact]
+    public async Task OwnBindingIsNotACollision()
+    {
+        client.Install.ClusterRoleBinding = new V1ClusterRoleBinding
+        {
+            Subjects = [new Rbacv1Subject { Kind = "ServiceAccount", Name = "cn-dp-update-controller", NamespaceProperty = "cn-data-plane-system" }],
+        };
+
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        Assert.Single(client.AppliedObjects.OfType<V1CronJob>());
+    }
+
+    [Fact]
+    public async Task BindingToAnotherServiceAccountIsACollision()
+    {
+        client.Install.ClusterRoleBinding = new V1ClusterRoleBinding
+        {
+            Subjects = [new Rbacv1Subject { Kind = "ServiceAccount", Name = "intruder", NamespaceProperty = "cn-data-plane-system" }],
+        };
+
+        await Assert.ThrowsAsync<InstallBlockedException>(() => Service().InstallAsync(Config(), recoverController: false));
+
+        Assert.Empty(client.AppliedObjects);
+        Assert.Empty(client.Install.Namespaces);
+        Assert.Empty(client.Install.ConfigMaps);
+    }
+
+    /// <summary>The cluster-scoped rows of the Controller access matrix, rule by rule, before the profile.</summary>
+    [Fact]
+    public async Task ClusterRoleStartsWithExactlyTheClusterScopedMatrix()
+    {
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        var expected = new[]
+        {
+            "rbac.authorization.k8s.io|clusterroles,clusterrolebindings|get,patch|cn-dp-deployer-cn-data-plane-system",
+            "rbac.authorization.k8s.io|clusterroles,clusterrolebindings|create|",
+            "|namespaces|get,create,patch|",
+            "|secrets|get,patch|cn-system-image-pull-secret",
+            "|secrets|create|",
+        };
+        var rules = Applied<V1ClusterRole>().Rules;
+        var operational = rules.Take(expected.Length).Select(r =>
+            $"{string.Join(",", r.ApiGroups)}|{string.Join(",", r.Resources)}|{string.Join(",", r.Verbs)}|{string.Join(",", r.ResourceNames ?? [])}");
+
+        Assert.Equal(expected, operational);
+        Assert.Equal(InstallManifestBuilder.DeployerProfile().Count, rules.Count - expected.Length);
+        Assert.DoesNotContain(rules.Take(expected.Length), r => r.Verbs.Contains("escalate") || r.Verbs.Contains("bind") || r.Verbs.Contains("delete"));
+    }
+
+    [Fact]
+    public async Task SecondInstallationInAnotherNamespaceIsRefusedBeforeMutation()
+    {
+        client.Install.InstallationBindings.Add(new V1ClusterRoleBinding
+        {
+            Metadata = new V1ObjectMeta { Name = "cn-dp-update-controller-first-ns" },
+            Subjects = [new Rbacv1Subject { Kind = "ServiceAccount", Name = "cn-dp-update-controller", NamespaceProperty = "first-ns" }],
+        });
+
+        var blocked = await Assert.ThrowsAsync<InstallBlockedException>(() => Service().InstallAsync(Config(), recoverController: false));
+
+        Assert.Contains("first-ns", blocked.Message);
+        Assert.Equal(
+            new[] { "app.kubernetes.io/part-of=codenow-data-plane,app.kubernetes.io/name=cn-dp-update-controller" },
+            client.Install.ClusterRoleBindingSelectors);
+        Assert.Empty(client.AppliedObjects);
+        Assert.Empty(client.Install.Namespaces);
+        Assert.Empty(client.Install.ConfigMaps);
+    }
+
+    [Fact]
+    public async Task RerunOfTheSameInstallationIsNotASecondInstallation()
+    {
+        client.Install.InstallationBindings.Add(new V1ClusterRoleBinding
+        {
+            Subjects = [new Rbacv1Subject { Kind = "ServiceAccount", Name = "cn-dp-update-controller", NamespaceProperty = "cn-data-plane-system" }],
+        });
+
+        await Service().InstallAsync(Config(), recoverController: false);
+
+        Assert.Single(client.AppliedObjects.OfType<V1CronJob>());
+    }
+
+    [Fact]
+    public void OtherInstallationIsTheServiceAccountNamespaceOfAnyOtherBinding()
+    {
+        V1ClusterRoleBinding Binding(params string[] namespaces) => new()
+        {
+            Subjects = namespaces.Select(ns => new Rbacv1Subject { Kind = "ServiceAccount", Name = "cn-dp-update-controller", NamespaceProperty = ns }).ToList(),
+        };
+
+        Assert.Null(InstallService.OtherInstallationNamespace([], "ns"));
+        Assert.Null(InstallService.OtherInstallationNamespace([Binding("ns")], "ns"));
+        Assert.Null(InstallService.OtherInstallationNamespace([new V1ClusterRoleBinding()], "ns"));
+        Assert.Equal("other", InstallService.OtherInstallationNamespace([Binding("ns"), Binding("other")], "ns"));
+    }
+
+    [Fact]
+    public void RegularBuildsKeepTheOneInstallationPerClusterCheck()
+    {
+        Assert.False(InstallService.SeveralInstallationsPerCluster);
+    }
+
+    private static bool Covers(IEnumerable<V1PolicyRule> held, V1PolicyRule delegated)
+    {
+        if (delegated.NonResourceURLs is { Count: > 0 } urls)
+        {
+            return urls.All(url => delegated.Verbs.All(verb => held.Any(rule =>
+                Matches(rule.NonResourceURLs, url) && Matches(rule.Verbs, verb))));
+        }
+
+        return delegated.ApiGroups.All(group => delegated.Resources.All(resource => delegated.Verbs.All(verb =>
+            (delegated.ResourceNames is { Count: > 0 } names ? names : [null]).All(name => held.Any(rule =>
+                Matches(rule.ApiGroups, group)
+                && Matches(rule.Resources, resource)
+                && Matches(rule.Verbs, verb)
+                && (rule.ResourceNames is not { Count: > 0 } || (name is not null && rule.ResourceNames.Contains(name))))))));
+    }
+
+    private static bool Matches(IList<string>? values, string value) => values is not null && (values.Contains("*") || values.Contains(value));
+
+    private static string Describe(V1PolicyRule rule) =>
+        $"{string.Join(",", rule.ApiGroups ?? [])} {string.Join(",", rule.Resources ?? rule.NonResourceURLs ?? [])} {string.Join(",", rule.Verbs)}";
 
     [Fact]
     public async Task RerunPreservesIdentityImageAndOverrides()
@@ -166,6 +424,7 @@ public class InstallServiceTests
     [Fact]
     public async Task BindingInAnotherNamespaceIsACollision()
     {
+        // The binding name ends with this namespace, so a subject elsewhere means a foreign resource.
         client.Install.ClusterRoleBinding = new V1ClusterRoleBinding
         {
             Subjects = [new Rbacv1Subject { Kind = "ServiceAccount", Name = "x", NamespaceProperty = "other" }],

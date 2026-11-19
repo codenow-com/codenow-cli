@@ -6,7 +6,7 @@ Architecture and maintenance guide for the CodeNOW CLI (`cn`).
 
 A .NET 10 NativeAOT CLI for bootstrapping and managing CodeNOW Data Plane infrastructure on Kubernetes. Ships as a single binary (`cn`).
 
-**Commands**: `cn dp bootstrap`, `cn dp dashboard`, `cn dp config encrypt`
+**Commands**: `cn dp install`, `cn dp bootstrap`, `cn dp dashboard`, `cn dp config encrypt`
 
 ## Architecture
 
@@ -25,6 +25,10 @@ src/CodeNOW.Cli/
 ```
 
 ## Commands
+
+### `cn dp install`
+
+Installs the Controller-managed Data Plane: namespace, identity, Controller configuration, credentials, Controller RBAC and the CronJob, enabled last. It never creates a Job or contacts the Control Plane or the registry. `--recover-controller` puts an existing CronJob back on `:latest`. See [Install Feature](#install-feature).
 
 ### `cn dp bootstrap`
 
@@ -72,6 +76,33 @@ Manifests under `assets/vendor/generated/dataplane/` are embedded as resources a
 | `fluxcd/` | FluxCD Source Controller manifests |
 
 Operator resource names are prefixed with `cn-pulumi-` at runtime (`PulumiOperatorProvisioner.EnsurePrefixed()`).
+
+## Install Feature
+
+`cn dp install` implements the Installer of the OpenSpec change `data-plane-install-and-self-update` in the codenow-data-plane repository (`openspec/changes/data-plane-install-and-self-update/`). Its specs, chiefly `specs/data-plane-installation/spec.md`, are the contract: resource names, the Installer and Controller permission matrices, CronJob settings, identity and collision rules. Read them before changing this command; the Controller that runs under these resources lives in that repository's `deployment/update-controller`.
+
+### Rules
+
+- The Controller Role, ClusterRole and their bindings are exactly the spec's Controller access matrix, no broader. Cluster-scoped names end with `-<installation namespace>`.
+- A cluster holds one installation. The check for an installation in another namespace may be skipped only by the testing switch of local test builds; published releases always keep it.
+- The Deployer profile is embedded from `assets/vendor/generated/dataplane/update-controller/deployer-profile.json`, generated from the Controller's `Rbac/deployer-profile.json`; never edit the copy by hand.
+- A rerun keeps the identity, a pinned CronJob image, status, state and passphrase. A lost identity means a new UUID; nothing is restored from a backup.
+- `cn dp bootstrap --show-permissions-only` and `BuildDeployerClusterRole()` belong to the bootstrap (operator) flow, not to this command.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `DataPlane/Console/Commands/InstallCommand.cs` | Options and entry point |
+| `DataPlane/Services/Provisioning/InstallConfigLoader.cs` | Installation configuration file |
+| `DataPlane/Services/Provisioning/InstallService.cs` | Detection, collision checks, ordering, rerun and recovery |
+| `DataPlane/Services/Provisioning/InstallManifestBuilder.cs` | Every resource the command applies, including RBAC and the CronJob |
+| `tests/CodeNOW.Cli.Tests/DataPlane/Services/Provisioning/InstallServiceTests.cs` | Unit tests against the fake Kubernetes client |
+| `docs/latest/commands/dp/install.md` | User documentation; keep it in step with the spec |
+
+### Verification
+
+Unit tests: `dotnet test tests/CodeNOW.Cli.Tests/CodeNOW.Cli.Tests.csproj`. Cluster behaviour (real RBAC delegation checks, Restricted admission) is verified only on a disposable cluster started for the run, never on an existing one, with `cn dp install` run as an identity holding just the spec's Installer matrix.
 
 ## `--show-permissions-only` Feature
 

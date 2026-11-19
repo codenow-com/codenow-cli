@@ -31,6 +31,20 @@
 
   </PropertyGroup>
 
+  <!--
+    Testing switch for local test builds only: `dotnet build -p:CnDpInstallTesting=true` lets
+    `cn dp install` place several installations in one cluster. Release builds refuse it, so published
+    binaries always keep the one-installation-per-cluster check.
+  -->
+  <PropertyGroup Condition="'$(CnDpInstallTesting)' == 'true'">
+    <DefineConstants>$(DefineConstants);CN_DP_INSTALL_TESTING</DefineConstants>
+  </PropertyGroup>
+
+  <Target Name="RejectInstallTestingSwitchInRelease" BeforeTargets="CoreCompile"
+          Condition="'$(CnDpInstallTesting)' == 'true' And '$(Configuration)' == 'Release'">
+    <Error Text="CnDpInstallTesting is for local test builds only and cannot be used in a Release build." />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="ConsoleAppFramework" Version="5.7.13">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

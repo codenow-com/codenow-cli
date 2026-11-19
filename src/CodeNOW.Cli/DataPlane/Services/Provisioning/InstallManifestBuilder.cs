@@ -17,12 +17,28 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
     public const string PullSecretName = "cn-system-image-pull-secret";
     public const string ControllerRepository = "codenow/data-plane-update-controller";
     public const string Schedule = "*/5 * * * *";
+    public const string DeployerName = "cn-dp-deployer";
+
+    /// <summary>Kubernetes deadline of one Controller Job, matching the Controller's 900-second run budget.</summary>
+    public const long RunDeadlineSeconds = 900;
+
+    /// <summary>Pod termination grace of one Controller Job.</summary>
+    public const long TerminationGraceSeconds = 30;
 
     private const string RbacGroup = "rbac.authorization.k8s.io";
     private const string ProfileResource = "DataPlane/Manifests/UpdateController/deployer-profile.json";
     private const long NonRootId = 65532;
 
     private string Namespace => config.NamespaceName!;
+
+    /// <summary>
+    /// Name of the Controller ClusterRole and ClusterRoleBinding. Cluster-scoped names end with the
+    /// installation namespace, so installations never share a cluster-scoped resource.
+    /// </summary>
+    public static string ClusterScopedName(string namespaceName) => $"{ControllerName}-{namespaceName}";
+
+    /// <summary>Name of the Deployer ClusterRole and ClusterRoleBinding the Controller provisions.</summary>
+    public static string DeployerClusterScopedName(string namespaceName) => $"{DeployerName}-{namespaceName}";
 
     /// <summary>The Secret referenced by both Job types.</summary>
     public string EffectivePullSecret => config.ImagePullSecret ?? PullSecretName;
@@ -130,7 +146,11 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
         Metadata = new V1ObjectMeta { Name = ControllerName, NamespaceProperty = Namespace, Labels = ControllerLabels() },
     };
 
-    /// <summary>Namespaced operations, exactly the Controller access matrix.</summary>
+    /// <summary>
+    /// Namespaced operations, exactly the Controller access matrix. Fixed names restrict <c>get</c> and
+    /// <c>patch</c>; <c>create</c> cannot use <c>resourceNames</c>, so it has its own rules. Attempt
+    /// journals and their Roles/RoleBindings have dynamic names, so their rules are namespace-wide.
+    /// </summary>
     public V1Role Role() => new()
     {
         ApiVersion = $"{RbacGroup}/v1",
@@ -139,20 +159,17 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
         Rules =
         [
             Rule("batch", ["cronjobs"], ["get", "patch"], [ControllerName]),
-            Rule("batch", ["jobs"], ["get", "list", "create", "delete"]),
-            Rule("", ["pods"], ["list"]),
-            Rule("", ["configmaps"], ["get"], [ConfigName, IdentityName]),
-            Rule("", ["configmaps"], ["get", "patch"], ["cn-dp-status", "cn-dp-deployer-config"]),
-            Rule("", ["configmaps"], ["create"]),
+            Rule("batch", ["jobs"], ["get", "list", "watch", "create", "delete"]),
+            Rule("", ["pods"], ["list", "watch"]),
+            Rule("", ["configmaps"], ["get", "list", "watch", "create", "patch", "delete"]),
             Rule("", ["persistentvolumeclaims"], ["get"], ["cn-dp-pulumi-state"]),
             Rule("", ["persistentvolumeclaims"], ["create"]),
             Rule("", ["secrets"], ["get"], [AuthorizationName, "cn-dp-pulumi-passphrase", "cn-dp-deployer-secrets"]),
             Rule("", ["secrets"], ["patch"], ["cn-dp-deployer-secrets"]),
             Rule("", ["secrets"], ["create"]),
-            Rule("", ["serviceaccounts"], ["get", "patch"], ["cn-dp-deployer"]),
+            Rule("", ["serviceaccounts"], ["get", "patch"], [DeployerName]),
             Rule("", ["serviceaccounts"], ["create"]),
-            Rule(RbacGroup, ["roles", "rolebindings"], ["get", "patch"], ["cn-dp-deployer"]),
-            Rule(RbacGroup, ["roles", "rolebindings"], ["create"]),
+            Rule(RbacGroup, ["roles", "rolebindings"], ["get", "list", "create", "patch", "delete"]),
         ],
     };
 
@@ -165,31 +182,43 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
         Subjects = [Subject()],
     };
 
-    /// <summary>Deployer RBAC provisioning plus the whole profile, so delegation checks pass.</summary>
+    /// <summary>
+    /// Cluster-scoped operations of the Controller access matrix: Deployer RBAC provisioning, and the system
+    /// namespaces with their image pull Secret (the namespaces come from configuration, so these rules are
+    /// cluster-wide). Then the whole approved Deployer profile, so Kubernetes delegation checks pass without
+    /// <c>escalate</c> or <c>bind</c> overrides. The profile is additive: its broad rules are not narrowed by
+    /// the operational name restrictions.
+    /// </summary>
     public V1ClusterRole ClusterRole()
     {
-        var rules = new List<V1PolicyRule>
-        {
-            Rule(RbacGroup, ["clusterroles", "clusterrolebindings"], ["get", "patch"], ["cn-dp-deployer"]),
-            Rule(RbacGroup, ["clusterroles", "clusterrolebindings"], ["create"]),
-        };
-        rules.AddRange(LoadProfile());
+        var rules = OperationalClusterRules();
+        rules.AddRange(DeployerProfile());
 
         return new V1ClusterRole
         {
             ApiVersion = $"{RbacGroup}/v1",
             Kind = "ClusterRole",
-            Metadata = new V1ObjectMeta { Name = ControllerName, Labels = ControllerLabels() },
+            Metadata = new V1ObjectMeta { Name = ClusterScopedName(Namespace), Labels = ControllerLabels() },
             Rules = rules,
         };
     }
+
+    /// <summary>The Controller-specific cluster-scoped rules, without the Deployer profile.</summary>
+    public List<V1PolicyRule> OperationalClusterRules() =>
+    [
+        Rule(RbacGroup, ["clusterroles", "clusterrolebindings"], ["get", "patch"], [DeployerClusterScopedName(Namespace)]),
+        Rule(RbacGroup, ["clusterroles", "clusterrolebindings"], ["create"]),
+        Rule("", ["namespaces"], ["get", "create", "patch"]),
+        Rule("", ["secrets"], ["get", "patch"], [PullSecretName]),
+        Rule("", ["secrets"], ["create"]),
+    ];
 
     public V1ClusterRoleBinding ClusterRoleBinding() => new()
     {
         ApiVersion = $"{RbacGroup}/v1",
         Kind = "ClusterRoleBinding",
-        Metadata = new V1ObjectMeta { Name = ControllerName, Labels = ControllerLabels() },
-        RoleRef = new V1RoleRef { ApiGroup = RbacGroup, Kind = "ClusterRole", Name = ControllerName },
+        Metadata = new V1ObjectMeta { Name = ClusterScopedName(Namespace), Labels = ControllerLabels() },
+        RoleRef = new V1RoleRef { ApiGroup = RbacGroup, Kind = "ClusterRole", Name = ClusterScopedName(Namespace) },
         Subjects = [Subject()],
     };
 
@@ -212,6 +241,7 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
                     Metadata = new V1ObjectMeta { Labels = new Dictionary<string, string>(labels) },
                     Spec = new V1JobSpec
                     {
+                        ActiveDeadlineSeconds = RunDeadlineSeconds,
                         BackoffLimit = 0,
                         Template = new V1PodTemplateSpec
                         {
@@ -228,6 +258,7 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
     {
         ServiceAccountName = ControllerName,
         RestartPolicy = "Never",
+        TerminationGracePeriodSeconds = TerminationGraceSeconds,
         ImagePullSecrets = [new V1LocalObjectReference { Name = EffectivePullSecret }],
         SecurityContext = new V1PodSecurityContext
         {
@@ -284,7 +315,8 @@ public sealed class InstallManifestBuilder(InstallConfig config, string clusterI
         ResourceNames = names,
     };
 
-    private static List<V1PolicyRule> LoadProfile()
+    /// <summary>The approved Deployer profile rules the Controller delegates to the Deployer.</summary>
+    public static List<V1PolicyRule> DeployerProfile()
     {
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(ProfileResource)
             ?? throw new InvalidOperationException("Deployer permission profile is not embedded.");

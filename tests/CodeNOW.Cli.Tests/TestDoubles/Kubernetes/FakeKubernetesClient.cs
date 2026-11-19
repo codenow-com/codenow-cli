@@ -82,7 +82,21 @@ public sealed class FakeInstallClient : IKubernetesInstallClient
 
     public Task<V1CronJob?> ReadCronJobAsync(string name, string namespaceParameter) => Task.FromResult(CronJob);
 
-    public Task<V1ClusterRoleBinding?> ReadClusterRoleBindingAsync(string name) => Task.FromResult(ClusterRoleBinding);
+    public List<string> ClusterRoleBindingReads { get; } = new();
+    public List<V1ClusterRoleBinding> InstallationBindings { get; } = new();
+    public List<string> ClusterRoleBindingSelectors { get; } = new();
+
+    public Task<IList<V1ClusterRoleBinding>> ListClusterRoleBindingsAsync(string labelSelector)
+    {
+        ClusterRoleBindingSelectors.Add(labelSelector);
+        return Task.FromResult<IList<V1ClusterRoleBinding>>(InstallationBindings);
+    }
+
+    public Task<V1ClusterRoleBinding?> ReadClusterRoleBindingAsync(string name)
+    {
+        ClusterRoleBindingReads.Add(name);
+        return Task.FromResult(ClusterRoleBinding);
+    }
 }
 
 public sealed class FakeCoreV1Client : IKubernetesCoreClient

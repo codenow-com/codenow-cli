@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using CodeNOW.Cli.Adapters.Kubernetes;
 using CodeNOW.Cli.DataPlane.Models;
+using k8s.Models;
 using Microsoft.Extensions.Logging;
 
 namespace CodeNOW.Cli.DataPlane.Services.Provisioning;
@@ -17,6 +18,20 @@ public sealed partial class InstallService(
     [GeneratedRegex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")]
     private static partial Regex Uuid();
 
+    /// <summary>Selects the Controller ClusterRoleBindings of every Data Plane installation in the cluster.</summary>
+    public const string InstallationBindingSelector =
+        "app.kubernetes.io/part-of=codenow-data-plane,app.kubernetes.io/name=" + InstallManifestBuilder.ControllerName;
+
+    /// <summary>
+    /// Testing switch: true only in local test builds (<c>-p:CnDpInstallTesting=true</c>, refused in Release),
+    /// letting several installations share one cluster. Published releases keep one installation per cluster.
+    /// </summary>
+#if CN_DP_INSTALL_TESTING
+    public const bool SeveralInstallationsPerCluster = true;
+#else
+    public const bool SeveralInstallationsPerCluster = false;
+#endif
+
     /// <summary>Provisions prerequisites first and enables the CronJob last.</summary>
     /// <param name="config">Validated installation document.</param>
     /// <param name="recoverController">Restores the existing CronJob to <c>:latest</c>.</param>
@@ -27,13 +42,16 @@ public sealed partial class InstallService(
         var namespaceName = config.NamespaceName!;
 
         await RejectOperatorInstallationAsync(client, namespaceName);
+#if !CN_DP_INSTALL_TESTING
+        await RejectOtherInstallationAsync(install, namespaceName);
+#endif
+        await RejectBindingCollisionAsync(install, namespaceName);
 
         if (!await install.NamespaceExistsAsync(namespaceName))
             await install.CreateNamespaceAsync(namespaceName);
 
         var instance = await EnsureIdentityAsync(install, config, namespaceName);
         var manifests = new InstallManifestBuilder(config, instance);
-        await RejectBindingCollisionAsync(install, namespaceName);
 
         if (config.ImagePullSecret is { } existingSecret)
         {
@@ -102,13 +120,38 @@ public sealed partial class InstallService(
         return value;
     }
 
-    private static async Task RejectBindingCollisionAsync(IKubernetesInstallClient install, string namespaceName)
+    /// <summary>A cluster holds one installation: refuse when a Controller binding serves another namespace.</summary>
+    private static async Task RejectOtherInstallationAsync(IKubernetesInstallClient install, string namespaceName)
     {
-        var binding = await install.ReadClusterRoleBindingAsync(InstallManifestBuilder.ControllerName);
-        if (binding?.Subjects?.Any(subject => subject.NamespaceProperty != namespaceName) == true)
+        var bindings = await install.ListClusterRoleBindingsAsync(InstallationBindingSelector);
+        if (OtherInstallationNamespace(bindings, namespaceName) is { } other)
         {
             throw new InstallBlockedException(
-                $"ClusterRoleBinding {InstallManifestBuilder.ControllerName} targets another namespace; only one Data Plane installation per cluster is supported.");
+                $"Namespace {other} already holds a Data Plane installation, and a cluster holds only one. " +
+                $"Rerun cn dp install with namespaceName {other} to update it, or remove that installation first.");
+        }
+    }
+
+    /// <summary>The namespace of another installation's Controller ServiceAccount, or null when there is none.</summary>
+    public static string? OtherInstallationNamespace(IEnumerable<V1ClusterRoleBinding> bindings, string namespaceName) =>
+        bindings
+            .SelectMany(binding => binding.Subjects ?? [])
+            .Where(subject => subject.Kind == "ServiceAccount" && subject.NamespaceProperty is { Length: > 0 })
+            .Select(subject => subject.NamespaceProperty)
+            .FirstOrDefault(other => other != namespaceName);
+
+    /// <summary>The binding name carries the namespace, so any other subject means a foreign resource.</summary>
+    private static async Task RejectBindingCollisionAsync(IKubernetesInstallClient install, string namespaceName)
+    {
+        var name = InstallManifestBuilder.ClusterScopedName(namespaceName);
+        var binding = await install.ReadClusterRoleBindingAsync(name);
+        if (binding?.Subjects?.Any(subject => subject.Kind != "ServiceAccount"
+                || subject.Name != InstallManifestBuilder.ControllerName
+                || subject.NamespaceProperty != namespaceName) == true)
+        {
+            throw new InstallBlockedException(
+                $"ClusterRoleBinding {name} binds a subject other than ServiceAccount {InstallManifestBuilder.ControllerName} in namespace {namespaceName}. " +
+                "It does not belong to this installation; remove it or choose another namespace.");
         }
     }
 }
